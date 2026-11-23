@@ -21,7 +21,8 @@ import {
 import BlockNodeView, { type BlockNode } from './BlockNode'
 import ExternalInputNodeView from './ExternalInputNode'
 import ExternalOutputNodeView from './ExternalOutputNode'
-import type { BlockPort, DesignDocument } from './types'
+import ExternalAxiNodeView from './ExternalAxiNode'
+import type { BlockPort, DesignDocument, InterfacePortType } from './types'
 
 const STORAGE_KEY = 'block-design-studio-document-v1'
 const HISTORY_LIMIT = 100
@@ -29,6 +30,8 @@ const nodeTypes: NodeTypes = {
   block: BlockNodeView,
   externalInput: ExternalInputNodeView,
   externalOutput: ExternalOutputNodeView,
+  externalAxiMaster: ExternalAxiNodeView,
+  externalAxiSlave: ExternalAxiNodeView,
 }
 
 interface Snapshot {
@@ -244,15 +247,8 @@ export default function App() {
     const id = `external_input_${Date.now()}`
     const offset = nodesRef.current.filter((node) => node.type === 'externalInput').length * 64
     const nextNodes = [...nodesRef.current, {
-      id,
-      type: 'externalInput',
-      position: { x: 40, y: 140 + offset },
-      data: {
-        label: 'external_input',
-        kind: 'External Input',
-        ports: [{ id: 'external_output', name: 'external_input', direction: 'output', width: 1 }],
-        parameters: {},
-      },
+      id, type: 'externalInput', position: { x: 40, y: 140 + offset },
+      data: { label: 'external_input', kind: 'External Input', ports: [{ id: 'external_output', name: 'external_input', direction: 'output', width: 1 }], parameters: {} },
     }] as BlockNode[]
     nodesRef.current = nextNodes
     setNodes(nextNodes)
@@ -266,13 +262,36 @@ export default function App() {
     const id = `external_output_${Date.now()}`
     const offset = nodesRef.current.filter((node) => node.type === 'externalOutput').length * 64
     const nextNodes = [...nodesRef.current, {
+      id, type: 'externalOutput', position: { x: 520, y: 140 + offset },
+      data: { label: 'external_output', kind: 'External Output', ports: [{ id: 'external_input', name: 'external_output', direction: 'input', width: 1 }], parameters: {} },
+    }] as BlockNode[]
+    nodesRef.current = nextNodes
+    setNodes(nextNodes)
+    applyTransition(before, { nodes: nextNodes, edges: edgesRef.current })
+    setSelectedNodeId(id)
+    setStatus('External output added')
+  }, [applyTransition, setNodes, snapshot])
+
+  const addExternalAxiPort = useCallback((type: InterfacePortType) => {
+    const isMaster = type === 'axi.master'
+    const nodeType = isMaster ? 'externalAxiMaster' : 'externalAxiSlave'
+    const label = isMaster ? 'external_axi_master' : 'external_axi_slave'
+    const before = snapshot()
+    const offset = nodesRef.current.filter((node) => node.type === nodeType).length * 64
+    const id = `${nodeType}_${Date.now()}`
+    const nextNodes = [...nodesRef.current, {
       id,
-      type: 'externalOutput',
-      position: { x: 520, y: 140 + offset },
+      type: nodeType,
+      position: { x: isMaster ? 40 : 520, y: 140 + offset },
       data: {
-        label: 'external_output',
-        kind: 'External Output',
-        ports: [{ id: 'external_input', name: 'external_output', direction: 'input', width: 1 }],
+        label,
+        kind: isMaster ? 'External AXI Master' : 'External AXI Slave',
+        ports: [{
+          id: isMaster ? 'axi_master' : 'axi_slave',
+          name: label,
+          direction: isMaster ? 'output' : 'input',
+          type,
+        }],
         parameters: {},
       },
     }] as BlockNode[]
@@ -280,7 +299,7 @@ export default function App() {
     setNodes(nextNodes)
     applyTransition(before, { nodes: nextNodes, edges: edgesRef.current })
     setSelectedNodeId(id)
-    setStatus('External output added')
+    setStatus(`${isMaster ? 'External axi.master' : 'External axi.slave'} added`)
   }, [applyTransition, setNodes, snapshot])
 
   const deleteSelected = useCallback(() => {
@@ -299,14 +318,13 @@ export default function App() {
     const nextNodes = nodesRef.current.map((node) => {
       if (node.id !== selectedNodeId) return node
       const isExternal = node.type === 'externalInput' || node.type === 'externalOutput'
+        || node.type === 'externalAxiMaster' || node.type === 'externalAxiSlave'
       return {
         ...node,
         data: {
           ...node.data,
           label,
-          ports: isExternal
-            ? node.data.ports.map((port) => ({ ...port, name: label }))
-            : node.data.ports,
+          ports: isExternal ? node.data.ports.map((port) => ({ ...port, name: label })) : node.data.ports,
         },
       }
     }) as BlockNode[]
@@ -348,8 +366,10 @@ export default function App() {
       const document = JSON.parse(await file.text()) as DesignDocument
       if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format')
       const before = snapshot()
-      replaceDocument(document.nodes as BlockNode[], document.edges as Edge[])
-      applyTransition(before, { nodes: document.nodes as BlockNode[], edges: document.edges as Edge[] })
+      const nextNodes = document.nodes as BlockNode[]
+      const nextEdges = document.edges as Edge[]
+      replaceDocument(nextNodes, nextEdges)
+      applyTransition(before, { nodes: nextNodes, edges: nextEdges })
       setDesignName(document.name || 'untitled')
       setSelectedNodeId(null)
       setStatus('Design opened')
@@ -362,12 +382,17 @@ export default function App() {
     try {
       const document = JSON.parse(saved) as DesignDocument
       const before = snapshot()
-      replaceDocument(document.nodes as BlockNode[], document.edges as Edge[])
-      applyTransition(before, { nodes: document.nodes as BlockNode[], edges: document.edges as Edge[] })
+      const nextNodes = document.nodes as BlockNode[]
+      const nextEdges = document.edges as Edge[]
+      replaceDocument(nextNodes, nextEdges)
+      applyTransition(before, { nodes: nextNodes, edges: nextEdges })
       setDesignName(document.name || 'untitled')
       setStatus('Last saved design restored')
     } catch { setStatus('Saved design could not be restored') }
   }, [applyTransition, replaceDocument, snapshot])
+
+  const isExternalAxi = selectedNode?.type === 'externalAxiMaster' || selectedNode?.type === 'externalAxiSlave'
+  const isExternalSignal = selectedNode?.type === 'externalInput' || selectedNode?.type === 'externalOutput'
 
   return (
     <main className="app-shell">
@@ -392,10 +417,16 @@ export default function App() {
         <aside className="palette panel">
           <div className="panel-title">External Ports</div>
           <button className="library-item" onClick={addExternalInput}>
-            <span className="library-icon">I</span><span><strong>External Input</strong><small>Source port</small></span>
+            <span className="library-icon">I</span><span><strong>External Input</strong><small>Signal source</small></span>
           </button>
           <button className="library-item" onClick={addExternalOutput}>
-            <span className="library-icon">O</span><span><strong>External Output</strong><small>Target port</small></span>
+            <span className="library-icon">O</span><span><strong>External Output</strong><small>Signal target</small></span>
+          </button>
+          <button className="library-item" onClick={() => addExternalAxiPort('axi.master')}>
+            <span className="library-icon">M</span><span><strong>AXI Master</strong><small>axi.master interface</small></span>
+          </button>
+          <button className="library-item" onClick={() => addExternalAxiPort('axi.slave')}>
+            <span className="library-icon">S</span><span><strong>AXI Slave</strong><small>axi.slave interface</small></span>
           </button>
           <div className="panel-title block-library-title">Block Library</div>
           {blockTemplates.map((template, index) => (
@@ -434,17 +465,20 @@ export default function App() {
                 }} />
               </label>
               <label>Type<input value={selectedNode.data.kind} readOnly /></label>
-              {(selectedNode.type === 'externalInput' || selectedNode.type === 'externalOutput') && (
+              {isExternalSignal && (
                 <label>Width (bits)
                   <input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateSelectedWidth(Number(event.target.value))} />
                 </label>
               )}
               <div className="property-section"><strong>Ports</strong>
                 {selectedNode.data.ports.map((port) => (
-                  <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? `${port.direction} · ${port.width}-bit`}</small></div>
+                  <div className="port-property" key={port.id}>
+                    <span>{port.name}</span><small>{port.type ?? `${port.direction} · ${port.width}-bit`}</small>
+                  </div>
                 ))}
               </div>
-              <button className="danger" onClick={deleteSelected}>Delete {selectedNode.type?.startsWith('external') ? selectedNode.data.kind.toLowerCase() : 'block'}</button>
+              <button className="danger" onClick={deleteSelected}>Delete {selectedNode.data.kind.toLowerCase()}</button>
+              {isExternalAxi && <p className="external-port-note">AXI interfaces connect only from axi.master to axi.slave.</p>}
             </div>
           ) : <p className="empty-state">Select a block or external port to edit its properties.</p>}
         </aside>
