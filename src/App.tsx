@@ -19,11 +19,15 @@ import {
   type OnSelectionChangeParams,
 } from '@xyflow/react'
 import BlockNodeView, { type BlockNode } from './BlockNode'
-import type { BlockData, BlockPort, DesignDocument } from './types'
+import ExternalInputNodeView from './ExternalInputNode'
+import type { BlockPort, DesignDocument } from './types'
 
 const STORAGE_KEY = 'block-design-studio-document-v1'
 const HISTORY_LIMIT = 100
-const nodeTypes: NodeTypes = { block: BlockNodeView }
+const nodeTypes: NodeTypes = {
+  block: BlockNodeView,
+  externalInput: ExternalInputNodeView,
+}
 
 interface Snapshot {
   nodes: BlockNode[]
@@ -109,8 +113,7 @@ export default function App() {
     replaceDocument(previous.nodes, previous.edges)
     setSelectedNodeId(null)
     setStatus('Undo')
-    refreshHistoryState()
-  }, [refreshHistoryState, replaceDocument, snapshot])
+  }, [replaceDocument, snapshot])
 
   const redo = useCallback(() => {
     const next = futureRef.current.at(-1)
@@ -120,8 +123,7 @@ export default function App() {
     replaceDocument(next.nodes, next.edges)
     setSelectedNodeId(null)
     setStatus('Redo')
-    refreshHistoryState()
-  }, [refreshHistoryState, replaceDocument, snapshot])
+  }, [replaceDocument, snapshot])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -129,8 +131,7 @@ export default function App() {
       const key = event.key.toLowerCase()
       if (key === 'z') {
         event.preventDefault()
-        if (event.shiftKey) redo()
-        else undo()
+        if (event.shiftKey) redo(); else undo()
       } else if (key === 'y') {
         event.preventDefault()
         redo()
@@ -236,6 +237,28 @@ export default function App() {
     setStatus(`${template.label} added`)
   }, [applyTransition, setNodes, snapshot])
 
+  const addExternalInput = useCallback(() => {
+    const before = snapshot()
+    const id = `external_input_${Date.now()}`
+    const offset = nodesRef.current.filter((node) => node.type === 'externalInput').length * 64
+    const nextNodes = [...nodesRef.current, {
+      id,
+      type: 'externalInput',
+      position: { x: 40, y: 140 + offset },
+      data: {
+        label: 'external_input',
+        kind: 'External Input',
+        ports: [{ id: 'external_output', name: 'external_input', direction: 'output', width: 1 }],
+        parameters: {},
+      },
+    }] as BlockNode[]
+    nodesRef.current = nextNodes
+    setNodes(nextNodes)
+    applyTransition(before, { nodes: nextNodes, edges: edgesRef.current })
+    setSelectedNodeId(id)
+    setStatus('External input added')
+  }, [applyTransition, setNodes, snapshot])
+
   const deleteSelected = useCallback(() => {
     if (!selectedNodeId) return
     const before = snapshot()
@@ -249,8 +272,29 @@ export default function App() {
 
   const updateSelectedLabel = useCallback((label: string) => {
     if (!selectedNodeId) return
+    const nextNodes = nodesRef.current.map((node) => {
+      if (node.id !== selectedNodeId) return node
+      const isExternalInput = node.type === 'externalInput'
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          label,
+          ports: isExternalInput
+            ? node.data.ports.map((port) => ({ ...port, name: label }))
+            : node.data.ports,
+        },
+      }
+    }) as BlockNode[]
+    nodesRef.current = nextNodes
+    setNodes(nextNodes)
+  }, [selectedNodeId, setNodes])
+
+  const updateSelectedWidth = useCallback((width: number) => {
+    if (!selectedNodeId || !Number.isInteger(width) || width < 1) return
     const nextNodes = nodesRef.current.map((node) => node.id === selectedNodeId
-      ? { ...node, data: { ...node.data, label } } : node) as BlockNode[]
+      ? { ...node, data: { ...node.data, ports: node.data.ports.map((port, index) => index === 0 ? { ...port, width } : port) } }
+      : node) as BlockNode[]
     nodesRef.current = nextNodes
     setNodes(nextNodes)
   }, [selectedNodeId, setNodes])
@@ -326,7 +370,12 @@ export default function App() {
 
       <div className="workspace">
         <aside className="palette panel">
-          <div className="panel-title">Block Library</div>
+          <div className="panel-title">External Ports</div>
+          <button className="library-item" onClick={addExternalInput}>
+            <span className="library-icon">I</span>
+            <span><strong>External Input</strong><small>Source port</small></span>
+          </button>
+          <div className="panel-title block-library-title">Block Library</div>
           {blockTemplates.map((template, index) => (
             <button className="library-item" key={template.kind} onClick={() => addBlock(index)}>
               <span className="library-icon">{template.kind.slice(0, 1)}</span>
@@ -363,17 +412,19 @@ export default function App() {
                 }} />
               </label>
               <label>Type<input value={selectedNode.data.kind} readOnly /></label>
+              {selectedNode.type === 'externalInput' && (
+                <label>Width (bits)
+                  <input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateSelectedWidth(Number(event.target.value))} />
+                </label>
+              )}
               <div className="property-section"><strong>Ports</strong>
                 {selectedNode.data.ports.map((port) => (
-                  <div className="port-property" key={port.id}>
-                    <span>{port.name}</span>
-                    <small>{port.type ?? `${port.direction} · ${port.width}-bit`}</small>
-                  </div>
+                  <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? `${port.direction} · ${port.width}-bit`}</small></div>
                 ))}
               </div>
-              <button className="danger" onClick={deleteSelected}>Delete block</button>
+              <button className="danger" onClick={deleteSelected}>Delete {selectedNode.type === 'externalInput' ? 'external input' : 'block'}</button>
             </div>
-          ) : <p className="empty-state">Select a block to edit its properties.</p>}
+          ) : <p className="empty-state">Select a block or external input to edit its properties.</p>}
         </aside>
       </div>
 
