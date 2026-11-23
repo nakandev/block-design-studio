@@ -119,7 +119,6 @@ export default function App() {
       const key = event.key.toLowerCase()
 
       if (key === 'z') {
-        event.preventEvent?.()
         event.preventDefault()
         if (event.shiftKey) redo()
         else undo()
@@ -164,7 +163,25 @@ export default function App() {
     }
   }, [applyTransition, onEdgesChangeBase, snapshot])
 
+  const getConnectionPorts = useCallback((connection: Edge | Connection) => {
+    const sourceNode = nodesRef.current.find((node) => node.id === connection.source)
+    const targetNode = nodesRef.current.find((node) => node.id === connection.target)
+    const sourcePort = sourceNode?.data.ports.find((port) => port.id === connection.sourceHandle)
+    const targetPort = targetNode?.data.ports.find((port) => port.id === connection.targetHandle)
+    return { sourcePort, targetPort }
+  }, [])
+
   const onConnect = useCallback((connection: Connection) => {
+    const { sourcePort, targetPort } = getConnectionPorts(connection)
+    if (sourcePort?.direction !== 'output' || targetPort?.direction !== 'input') {
+      setStatus('Connect an output port to an input port')
+      return
+    }
+    if (sourcePort.width !== targetPort.width) {
+      setStatus(`Port width mismatch: ${sourcePort.width}-bit output cannot connect to ${targetPort.width}-bit input`)
+      return
+    }
+
     const before = snapshot()
     const targetAlreadyConnected = edgesRef.current.some((edge) =>
       edge.target === connection.target && edge.targetHandle === connection.targetHandle,
@@ -183,18 +200,19 @@ export default function App() {
     setEdges(nextEdges)
     applyTransition(before, { nodes: nodesRef.current, edges: nextEdges })
     setStatus('Connection created')
-  }, [applyTransition, setEdges, snapshot])
+  }, [applyTransition, getConnectionPorts, setEdges, snapshot])
 
   const isValidConnection = useCallback((connection: Edge | Connection) => {
-    if (!connection.source || !connection.target) return false
-    if (connection.source === connection.target) return false
+    if (!connection.source || !connection.target || connection.source === connection.target) return false
 
-    const sourceNode = nodesRef.current.find((node) => node.id === connection.source)
-    const targetNode = nodesRef.current.find((node) => node.id === connection.target)
-    const sourcePort = sourceNode?.data.ports.find((port) => port.id === connection.sourceHandle)
-    const targetPort = targetNode?.data.ports.find((port) => port.id === connection.targetHandle)
-    return sourcePort?.direction === 'output' && targetPort?.direction === 'input'
-  }, [])
+    const { sourcePort, targetPort } = getConnectionPorts(connection)
+    if (sourcePort?.direction !== 'output' || targetPort?.direction !== 'input') return false
+    if (sourcePort.width !== targetPort.width) {
+      setStatus(`Port width mismatch: ${sourcePort.width}-bit output cannot connect to ${targetPort.width}-bit input`)
+      return false
+    }
+    return true
+  }, [getConnectionPorts])
 
   const onSelectionChange = useCallback(({ nodes: selectedNodes }: OnSelectionChangeParams) => {
     setSelectedNodeId(selectedNodes.length === 1 ? selectedNodes[0].id : null)
@@ -376,7 +394,10 @@ export default function App() {
         </aside>
       </div>
 
-      <footer className="statusbar"><span>{status}</span><span>{nodes.length} blocks · {edges.length} connections</span></footer>
+      <footer className="statusbar">
+        <span className={status.includes('Port width mismatch') ? 'status-warning' : undefined} role="status">{status}</span>
+        <span>{nodes.length} blocks · {edges.length} connections</span>
+      </footer>
     </main>
   )
 }
