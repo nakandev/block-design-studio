@@ -1,0 +1,19 @@
+[
+  {
+    "kind": "Counter",
+    "label": "Counter",
+    "ports": [
+      { "id": "clk", "name": "clk", "direction": "input", "width": 1 },
+      { "id": "count", "name": "count", "direction": "output", "width": 32 }
+    ]
+  },
+  {
+    "kind": "CPU",
+    "label": "CPU",
+    "ports": [
+      { "id": "clk", "name": "clk", "direction": "input", "width": 1 },
+      { "id": "imem", "name": "imem", "direction": "output", "type": "axi.master" },
+      { "id": "dmem", "name": "dmem", "direction": "output", "type": "axi.master" }
+    ]
+  }
+]

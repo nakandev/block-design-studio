@@ -9,6 +9,12 @@ export interface BlockPort {
   type?: InterfacePortType
 }
 
+export interface BlockTemplate {
+  kind: string
+  label: string
+  ports: BlockPort[]
+}
+
 export interface BlockData {
   label: string
   kind: string

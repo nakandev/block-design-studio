@@ -1,6 +1,6 @@
 # Block Design Studio
 
-ブロック図を配置・配線し、ブラウザまたはJSONファイルとして保存できるエディターです。
+ブロック図を配置・配線し、ブラウザまたはJSONファイルとして保存できます。
 
 ## セットアップ
 
@@ -9,18 +9,40 @@ npm install
 npm run dev
 ```
 
-## ビルド
+## ブロック定義JSON
 
-```bash
-npm run build
+ヘッダーの **Load definitions** からブロック定義ファイルを読み込めます。
+読み込みに成功すると、ブロックライブラリがその定義へ置き換わります。
+
+```json
+[
+  {
+    "kind": "Counter",
+    "label": "Counter",
+    "ports": [
+      { "id": "clk", "name": "clk", "direction": "input", "width": 1 },
+      { "id": "count", "name": "count", "direction": "output", "width": 32 }
+    ]
+  }
+]
 ```
 
-## MVP機能
+### ポート定義
 
-- ブロックライブラリからブロックを追加
-- ノードの移動・選択・削除
-- 入力ポートへの接続制限
-- ブラウザストレージへの保存と復元
-- 設計のJSONエクスポートと読み込み
-- プロパティサイドバー
-- ズーム、パン、ミニマップ、グリッドスナップ
+通常ポート:
+
+```json
+{ "id": "clk", "name": "clk", "direction": "input", "width": 1 }
+```
+
+AXIポート:
+
+```json
+{ "id": "bus", "name": "bus", "type": "axi.master" }
+```
+
+```json
+{ "id": "bus", "name": "bus", "type": "axi.slave" }
+```
+
+サンプルは `examples/block-definitions.json` にあります。
