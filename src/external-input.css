@@ -88,3 +88,44 @@
   text-transform: uppercase;
   letter-spacing: .06em;
 }
+
+/* External clock/reset node styling */
+.external-signal-node {
+  width: 180px;
+  min-height: 76px;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(51, 65, 85, .1);
+  font-size: 12px;
+}
+.external-signal-node.clock-node { border: 1px solid #16a34a; background: #f7fef9; }
+.external-signal-node.reset-node { border: 1px solid #dc2626; background: #fffafa; }
+.external-signal-node.selected {
+  border: 2px solid #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+.external-signal-header {
+  height: 42px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 1px solid #dbe4ef;
+}
+.clock-node .external-signal-header { background: #ecfdf3; border-bottom-color: #dcfce7; }
+.reset-node .external-signal-header { background: #fef2f2; border-bottom-color: #fee2e2; }
+.external-signal-header span { color: #64748b; font-size: 9px; text-transform: uppercase; }
+.external-signal-port {
+  position: relative;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+.external-signal-port small { font-size: 9px; }
+.clock-node .external-signal-port small { color: #16a34a; }
+.reset-node .external-signal-port small { color: #dc2626; }
