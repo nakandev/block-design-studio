@@ -19,7 +19,7 @@ import {
   type OnSelectionChangeParams,
 } from '@xyflow/react'
 import BlockNodeView, { type BlockNode } from './BlockNode'
-import type { BlockData, DesignDocument } from './types'
+import type { BlockData, BlockPort, DesignDocument } from './types'
 
 const STORAGE_KEY = 'block-design-studio-document-v1'
 const HISTORY_LIMIT = 100
@@ -30,7 +30,7 @@ interface Snapshot {
   edges: Edge[]
 }
 
-const blockTemplates: Array<{ kind: string; label: string; ports: BlockData['ports'] }> = [
+const blockTemplates: Array<{ kind: string; label: string; ports: BlockPort[] }> = [
   { kind: 'Input', label: 'Input', ports: [{ id: 'data', name: 'data', direction: 'output', width: 32 }] },
   { kind: 'Output', label: 'Output', ports: [{ id: 'data', name: 'data', direction: 'input', width: 32 }] },
   { kind: 'Arithmetic', label: 'Adder', ports: [
@@ -42,6 +42,22 @@ const blockTemplates: Array<{ kind: string; label: string; ports: BlockData['por
     { id: 'clk', name: 'clk', direction: 'input', width: 1 },
     { id: 'din', name: 'din', direction: 'input', width: 32 },
     { id: 'dout', name: 'dout', direction: 'output', width: 32 },
+  ] },
+  { kind: 'CPU', label: 'CPU', ports: [
+    { id: 'clk', name: 'clk', direction: 'input', width: 1 },
+    { id: 'imem', name: 'imem', direction: 'output', type: 'axi.master' },
+    { id: 'dmem', name: 'dmem', direction: 'output', type: 'axi.master' },
+  ] },
+  { kind: 'AXI Interconnect', label: 'AXI Interconnect', ports: [
+    { id: 'clk', name: 'clk', direction: 'input', width: 1 },
+    { id: 's0', name: 's0', direction: 'output', type: 'axi.master' },
+    { id: 's1', name: 's1', direction: 'output', type: 'axi.master' },
+    { id: 'm0', name: 'm0', direction: 'input', type: 'axi.slave' },
+    { id: 'm1', name: 'm1', direction: 'input', type: 'axi.slave' },
+  ] },
+  { kind: 'AXI_I2C', label: 'AXI_I2C', ports: [
+    { id: 'clk', name: 'clk', direction: 'input', width: 1 },
+    { id: 'slave', name: 'slave', direction: 'input', type: 'axi.slave' },
   ] },
 ]
 
@@ -70,22 +86,14 @@ export default function App() {
   nodesRef.current = nodes
   edgesRef.current = edges
 
-  const refreshHistoryState = useCallback(() => {
-    setHistoryVersion((version) => version + 1)
-  }, [])
-
-  const snapshot = useCallback((): Snapshot => ({
-    nodes: nodesRef.current,
-    edges: edgesRef.current,
-  }), [])
-
+  const refreshHistoryState = useCallback(() => setHistoryVersion((version) => version + 1), [])
+  const snapshot = useCallback((): Snapshot => ({ nodes: nodesRef.current, edges: edgesRef.current }), [])
   const applyTransition = useCallback((before: Snapshot, after: Snapshot) => {
     if (before.nodes === after.nodes && before.edges === after.edges) return
     pastRef.current = [...pastRef.current, before].slice(-HISTORY_LIMIT)
     futureRef.current = []
     refreshHistoryState()
   }, [refreshHistoryState])
-
   const replaceDocument = useCallback((nextNodes: BlockNode[], nextEdges: Edge[]) => {
     nodesRef.current = nextNodes
     edgesRef.current = nextEdges
@@ -101,7 +109,8 @@ export default function App() {
     replaceDocument(previous.nodes, previous.edges)
     setSelectedNodeId(null)
     setStatus('Undo')
-  }, [replaceDocument, snapshot])
+    refreshHistoryState()
+  }, [refreshHistoryState, replaceDocument, snapshot])
 
   const redo = useCallback(() => {
     const next = futureRef.current.at(-1)
@@ -111,13 +120,13 @@ export default function App() {
     replaceDocument(next.nodes, next.edges)
     setSelectedNodeId(null)
     setStatus('Redo')
-  }, [replaceDocument, snapshot])
+    refreshHistoryState()
+  }, [refreshHistoryState, replaceDocument, snapshot])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return
       const key = event.key.toLowerCase()
-
       if (key === 'z') {
         event.preventDefault()
         if (event.shiftKey) redo()
@@ -134,7 +143,6 @@ export default function App() {
   const canUndo = pastRef.current.length > 0
   const canRedo = futureRef.current.length > 0
   void historyVersion
-
   const selectedNode = nodes.find((node) => node.id === selectedNodeId)
 
   const onNodesChange = useCallback((changes: NodeChange<BlockNode>[]) => {
@@ -142,11 +150,7 @@ export default function App() {
     const nextNodes = applyNodeChanges(changes, nodesRef.current) as BlockNode[]
     nodesRef.current = nextNodes
     onNodesChangeBase(changes)
-
-    const structuralChange = changes.some((change) =>
-      change.type === 'remove' || change.type === 'add' || change.type === 'replace',
-    )
-    if (structuralChange) {
+    if (changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) {
       applyTransition(before, { nodes: nextNodes, edges: edgesRef.current })
     }
   }, [applyTransition, onNodesChangeBase, snapshot])
@@ -156,9 +160,7 @@ export default function App() {
     const nextEdges = applyEdgeChanges(changes, edgesRef.current)
     edgesRef.current = nextEdges
     onEdgesChangeBase(changes)
-
-    const removal = changes.some((change) => change.type === 'remove')
-    if (removal) {
+    if (changes.some((change) => change.type === 'remove')) {
       applyTransition(before, { nodes: nodesRef.current, edges: nextEdges })
     }
   }, [applyTransition, onEdgesChangeBase, snapshot])
@@ -166,53 +168,53 @@ export default function App() {
   const getConnectionPorts = useCallback((connection: Edge | Connection) => {
     const sourceNode = nodesRef.current.find((node) => node.id === connection.source)
     const targetNode = nodesRef.current.find((node) => node.id === connection.target)
-    const sourcePort = sourceNode?.data.ports.find((port) => port.id === connection.sourceHandle)
-    const targetPort = targetNode?.data.ports.find((port) => port.id === connection.targetHandle)
-    return { sourcePort, targetPort }
+    return {
+      sourcePort: sourceNode?.data.ports.find((port) => port.id === connection.sourceHandle),
+      targetPort: targetNode?.data.ports.find((port) => port.id === connection.targetHandle),
+    }
+  }, [])
+
+  const getConnectionError = useCallback((sourcePort?: BlockPort, targetPort?: BlockPort) => {
+    if (!sourcePort || !targetPort) return 'Connect valid ports on both blocks'
+    if (sourcePort.type || targetPort.type) {
+      return sourcePort.type === 'axi.master' && targetPort.type === 'axi.slave'
+        ? null
+        : 'AXI ports can only connect axi.master to axi.slave'
+    }
+    if (sourcePort.direction !== 'output' || targetPort.direction !== 'input') {
+      return 'Connect an output port to an input port'
+    }
+    if (sourcePort.width !== targetPort.width) {
+      return `Port width mismatch: ${sourcePort.width}-bit output cannot connect to ${targetPort.width}-bit input`
+    }
+    return null
   }, [])
 
   const onConnect = useCallback((connection: Connection) => {
     const { sourcePort, targetPort } = getConnectionPorts(connection)
-    if (sourcePort?.direction !== 'output' || targetPort?.direction !== 'input') {
-      setStatus('Connect an output port to an input port')
-      return
-    }
-    if (sourcePort.width !== targetPort.width) {
-      setStatus(`Port width mismatch: ${sourcePort.width}-bit output cannot connect to ${targetPort.width}-bit input`)
-      return
-    }
+    const error = getConnectionError(sourcePort, targetPort)
+    if (error) { setStatus(error); return }
 
-    const before = snapshot()
     const targetAlreadyConnected = edgesRef.current.some((edge) =>
       edge.target === connection.target && edge.targetHandle === connection.targetHandle,
     )
-    if (targetAlreadyConnected) {
-      setStatus('This input port is already connected')
-      return
-    }
+    if (targetAlreadyConnected) { setStatus('This input port is already connected'); return }
 
-    const nextEdges = addEdge({
-      ...connection,
-      type: 'smoothstep',
-      markerEnd: { type: MarkerType.ArrowClosed },
-    }, edgesRef.current)
+    const before = snapshot()
+    const nextEdges = addEdge({ ...connection, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } }, edgesRef.current)
     edgesRef.current = nextEdges
     setEdges(nextEdges)
     applyTransition(before, { nodes: nodesRef.current, edges: nextEdges })
     setStatus('Connection created')
-  }, [applyTransition, getConnectionPorts, setEdges, snapshot])
+  }, [applyTransition, getConnectionError, getConnectionPorts, setEdges, snapshot])
 
   const isValidConnection = useCallback((connection: Edge | Connection) => {
     if (!connection.source || !connection.target || connection.source === connection.target) return false
-
     const { sourcePort, targetPort } = getConnectionPorts(connection)
-    if (sourcePort?.direction !== 'output' || targetPort?.direction !== 'input') return false
-    if (sourcePort.width !== targetPort.width) {
-      setStatus(`Port width mismatch: ${sourcePort.width}-bit output cannot connect to ${targetPort.width}-bit input`)
-      return false
-    }
-    return true
-  }, [getConnectionPorts])
+    const error = getConnectionError(sourcePort, targetPort)
+    if (error) setStatus(error)
+    return error === null
+  }, [getConnectionError, getConnectionPorts])
 
   const onSelectionChange = useCallback(({ nodes: selectedNodes }: OnSelectionChangeParams) => {
     setSelectedNodeId(selectedNodes.length === 1 ? selectedNodes[0].id : null)
@@ -221,16 +223,11 @@ export default function App() {
   const addBlock = useCallback((templateIndex: number) => {
     const before = snapshot()
     const template = blockTemplates[templateIndex]
-    const id = `${template.kind.toLowerCase()}_${Date.now()}`
+    const id = `${template.kind.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`
     const offset = nodesRef.current.length * 24
     const nextNodes = [...nodesRef.current, {
       id, type: 'block', position: { x: 260 + offset, y: 120 + offset },
-      data: {
-        label: template.label,
-        kind: template.kind,
-        ports: template.ports.map((port) => ({ ...port })),
-        parameters: {},
-      },
+      data: { label: template.label, kind: template.kind, ports: template.ports.map((port) => ({ ...port })), parameters: {} },
     }] as BlockNode[]
     nodesRef.current = nextNodes
     setNodes(nextNodes)
@@ -243,9 +240,7 @@ export default function App() {
     if (!selectedNodeId) return
     const before = snapshot()
     const nextNodes = nodesRef.current.filter((node) => node.id !== selectedNodeId)
-    const nextEdges = edgesRef.current.filter((edge) =>
-      edge.source !== selectedNodeId && edge.target !== selectedNodeId,
-    )
+    const nextEdges = edgesRef.current.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId)
     replaceDocument(nextNodes, nextEdges)
     applyTransition(before, { nodes: nextNodes, edges: nextEdges })
     setSelectedNodeId(null)
@@ -254,9 +249,8 @@ export default function App() {
 
   const updateSelectedLabel = useCallback((label: string) => {
     if (!selectedNodeId) return
-    const nextNodes = nodesRef.current.map((node) =>
-      node.id === selectedNodeId ? { ...node, data: { ...node.data, label } } : node,
-    ) as BlockNode[]
+    const nextNodes = nodesRef.current.map((node) => node.id === selectedNodeId
+      ? { ...node, data: { ...node.data, label } } : node) as BlockNode[]
     nodesRef.current = nextNodes
     setNodes(nextNodes)
   }, [selectedNodeId, setNodes])
@@ -284,9 +278,7 @@ export default function App() {
   const openDocument = useCallback(async (file: File) => {
     try {
       const document = JSON.parse(await file.text()) as DesignDocument
-      if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) {
-        throw new Error('Unsupported design format')
-      }
+      if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format')
       const before = snapshot()
       const nextNodes = document.nodes as BlockNode[]
       const nextEdges = document.edges as Edge[]
@@ -295,9 +287,7 @@ export default function App() {
       setDesignName(document.name || 'untitled')
       setSelectedNodeId(null)
       setStatus('Design opened')
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not open design')
-    }
+    } catch (error) { setStatus(error instanceof Error ? error.message : 'Could not open design') }
   }, [applyTransition, replaceDocument, snapshot])
 
   const restoreLastSaved = useCallback(() => {
@@ -323,8 +313,7 @@ export default function App() {
         <div className="top-actions">
           <button className="history-button" onClick={undo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)">↶</button>
           <button className="history-button" onClick={redo} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)">↷</button>
-          <button onClick={restoreLastSaved}>Restore</button>
-          <button onClick={saveDocument}>Save</button>
+          <button onClick={restoreLastSaved}>Restore</button><button onClick={saveDocument}>Save</button>
           <button className="primary" onClick={exportDocument}>Export JSON</button>
           <button onClick={() => fileInputRef.current?.click()}>Open</button>
           <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => {
@@ -339,7 +328,7 @@ export default function App() {
         <aside className="palette panel">
           <div className="panel-title">Block Library</div>
           {blockTemplates.map((template, index) => (
-            <button className="library-item" key={template.label} onClick={() => addBlock(index)}>
+            <button className="library-item" key={template.kind} onClick={() => addBlock(index)}>
               <span className="library-icon">{template.kind.slice(0, 1)}</span>
               <span><strong>{template.label}</strong><small>{template.kind}</small></span>
             </button>
@@ -350,8 +339,7 @@ export default function App() {
           <ReactFlow
             nodes={nodes} edges={edges} nodeTypes={nodeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-            onConnect={onConnect} isValidConnection={isValidConnection}
-            onSelectionChange={onSelectionChange}
+            onConnect={onConnect} isValidConnection={isValidConnection} onSelectionChange={onSelectionChange}
             onNodeDragStart={() => { dragStartRef.current = snapshot() }}
             onNodeDragStop={() => {
               if (!dragStartRef.current) return
@@ -370,22 +358,17 @@ export default function App() {
           {selectedNode ? (
             <div className="property-form">
               <label>Name
-                <input
-                  value={selectedNode.data.label}
-                  onFocus={() => { labelEditStartRef.current = snapshot() }}
-                  onChange={(event) => updateSelectedLabel(event.target.value)}
-                  onBlur={() => {
-                    if (labelEditStartRef.current) {
-                      applyTransition(labelEditStartRef.current, snapshot())
-                      labelEditStartRef.current = null
-                    }
-                  }}
-                />
+                <input value={selectedNode.data.label} onFocus={() => { labelEditStartRef.current = snapshot() }} onChange={(event) => updateSelectedLabel(event.target.value)} onBlur={() => {
+                  if (labelEditStartRef.current) { applyTransition(labelEditStartRef.current, snapshot()); labelEditStartRef.current = null }
+                }} />
               </label>
               <label>Type<input value={selectedNode.data.kind} readOnly /></label>
               <div className="property-section"><strong>Ports</strong>
                 {selectedNode.data.ports.map((port) => (
-                  <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.direction} · {port.width}-bit</small></div>
+                  <div className="port-property" key={port.id}>
+                    <span>{port.name}</span>
+                    <small>{port.type ?? `${port.direction} · ${port.width}-bit`}</small>
+                  </div>
                 ))}
               </div>
               <button className="danger" onClick={deleteSelected}>Delete block</button>
@@ -395,7 +378,7 @@ export default function App() {
       </div>
 
       <footer className="statusbar">
-        <span className={status.includes('Port width mismatch') ? 'status-warning' : undefined} role="status">{status}</span>
+        <span className={status.includes('mismatch') || status.includes('AXI ports') ? 'status-warning' : undefined} role="status">{status}</span>
         <span>{nodes.length} blocks · {edges.length} connections</span>
       </footer>
     </main>

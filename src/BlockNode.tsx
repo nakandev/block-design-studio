@@ -1,7 +1,26 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
-import type { BlockData } from './types'
+import type { BlockData, BlockPort } from './types'
 
 export type BlockNode = Node<BlockData, 'block'>
+
+function PortRow({ port, side }: { port: BlockPort; side: 'input' | 'output' }) {
+  const isInput = side === 'input'
+
+  return (
+    <div className={`port-row ${isInput ? 'input-row' : 'output-row'}`}>
+      <Handle
+        type={isInput ? 'target' : 'source'}
+        position={isInput ? Position.Left : Position.Right}
+        id={port.id}
+        className={`port-handle ${isInput ? 'input-handle' : 'output-handle'}${port.type ? ' interface-handle' : ''}`}
+      />
+      <span>{port.name}</span>
+      {port.type
+        ? <small className="interface-label">{port.type}</small>
+        : port.width !== undefined && <small>{port.width}</small>}
+    </div>
+  )
+}
 
 export default function BlockNodeView({ data, selected }: NodeProps<BlockNode>) {
   const inputs = data.ports.filter((port) => port.direction === 'input')
@@ -13,36 +32,12 @@ export default function BlockNodeView({ data, selected }: NodeProps<BlockNode>) 
         <span className="block-kind">{data.kind}</span>
         <strong>{data.label}</strong>
       </div>
-
       <div className="ports">
         <div className="input-ports">
-          {inputs.map((port) => (
-            <div className="port-row input-row" key={port.id}>
-              <Handle
-                type="target"
-                position={Position.Left}
-                id={port.id}
-                className="port-handle input-handle"
-              />
-              <span>{port.name}</span>
-              <small>{port.width}</small>
-            </div>
-          ))}
+          {inputs.map((port) => <PortRow key={port.id} port={port} side="input" />)}
         </div>
-
         <div className="output-ports">
-          {outputs.map((port) => (
-            <div className="port-row output-row" key={port.id}>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={port.id}
-                className="port-handle output-handle"
-              />
-              <span>{port.name}</span>
-              <small>{port.width}</small>
-            </div>
-          ))}
+          {outputs.map((port) => <PortRow key={port.id} port={port} side="output" />)}
         </div>
       </div>
     </div>

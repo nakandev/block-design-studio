@@ -1,10 +1,13 @@
 export type PortDirection = 'input' | 'output'
+export type InterfacePortType = 'axi.master' | 'axi.slave'
 
 export interface BlockPort {
   id: string
   name: string
   direction: PortDirection
-  width: number
+  /** Omit for interface ports whose compatibility is determined by type. */
+  width?: number
+  type?: InterfacePortType
 }
 
 export interface BlockData {
