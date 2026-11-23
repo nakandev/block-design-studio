@@ -13,7 +13,7 @@ const TRACK_PENALTY = 12
 function simplify(points: Point[]): Point[] {
   const result: Point[] = []
   for (const point of points) {
-    const previous = result.at(-1)
+    const previous = result.length ? result[result.length - 1] : undefined
     if (previous && previous.x === point.x && previous.y === point.y) continue
     if (result.length > 1) {
       const before = result[result.length - 2]
@@ -51,19 +51,13 @@ function toSegments(points: Point[]): Segment[] {
   return points.slice(1).map((point, index) => ({ a: points[index], b: point }))
 }
 
-function routeEdge(
-  source: Point,
-  target: Point,
-  obstacles: Obstacle[],
-  preferredTrackX: number,
-): Point[] {
+function routeEdge(source: Point, target: Point, obstacles: Obstacle[], preferredTrackX: number): Point[] {
   const start = { x: source.x + STUB, y: source.y }
   const end = { x: target.x - STUB, y: target.y }
   const minX = Math.min(start.x, end.x, ...obstacles.map((item) => item.left)) - CLEARANCE * 3
   const maxX = Math.max(start.x, end.x, ...obstacles.map((item) => item.right)) + CLEARANCE * 3
   const minY = Math.min(source.y, target.y, ...obstacles.map((item) => item.top)) - CLEARANCE * 3
   const maxY = Math.max(source.y, target.y, ...obstacles.map((item) => item.bottom)) + CLEARANCE * 3
-
   const xs = new Set<number>([start.x, end.x, preferredTrackX])
   const ys = new Set<number>([source.y, target.y, (source.y + target.y) / 2])
   for (let x = minX; x <= maxX; x += LANE_GAP) xs.add(x)
@@ -79,7 +73,6 @@ function routeEdge(
   const horizontalYs = [...ys].sort((a, b) =>
     Math.abs(a - (source.y + target.y) / 2) - Math.abs(b - (source.y + target.y) / 2),
   )
-
   let best: Point[] | undefined
   let bestScore = Number.POSITIVE_INFINITY
 
@@ -91,29 +84,17 @@ function routeEdge(
         simplify([source, start, { x: middleX, y: start.y }, { x: middleX, y: middleY }, { x: end.x, y: middleY }, end, target]),
         simplify([source, start, { x: start.x, y: middleY }, { x: end.x, y: middleY }, end, target]),
       ]
-
       for (const candidate of candidates) {
         const segments = toSegments(candidate)
         if (segments.some((segment) => obstacles.some((obstacle) => intersectsObstacle(segment.a, segment.b, obstacle)))) continue
-
-        const length = segments.reduce((total, segment) =>
-          total + Math.abs(segment.b.x - segment.a.x) + Math.abs(segment.b.y - segment.a.y), 0)
+        const length = segments.reduce((total, segment) => total + Math.abs(segment.b.x - segment.a.x) + Math.abs(segment.b.y - segment.a.y), 0)
         const verticalSegments = segments.filter((segment) => segment.a.x === segment.b.x)
-        // Penalize vertical segments away from this connection's assigned lane.
-        // Edges sharing a source/target pair receive distinct lanes, so their
-        // long vertical runs no longer sit on top of each other.
-        const trackDeviation = verticalSegments.reduce((total, segment) =>
-          total + Math.abs(segment.a.x - preferredTrackX), 0)
+        const trackDeviation = verticalSegments.reduce((total, segment) => total + Math.abs(segment.a.x - preferredTrackX), 0)
         const score = length + Math.max(0, candidate.length - 2) * 30 + trackDeviation * TRACK_PENALTY
-
-        if (score < bestScore) {
-          best = candidate
-          bestScore = score
-        }
+        if (score < bestScore) { best = candidate; bestScore = score }
       }
     }
   }
-
   if (!best) {
     const outsideLane = minY - LANE_GAP
     best = [source, start, { x: preferredTrackX, y: outsideLane }, { x: end.x, y: outsideLane }, end, target]
@@ -132,43 +113,17 @@ export default function OrthogonalEdge(props: EdgeProps) {
   const targetNode = nodes.find((node) => node.id === props.target)
   if (!sourceNode || !targetNode) return null
 
-  const obstacles = nodes
-    .filter((node) => node.id !== props.source && node.id !== props.target)
-    .map((node) => {
-      const width = node.measured?.width ?? node.width ?? 196
-      const height = node.measured?.height ?? node.height ?? 96
-      return {
-        left: node.position.x - CLEARANCE,
-        right: node.position.x + width + CLEARANCE,
-        top: node.position.y - CLEARANCE,
-        bottom: node.position.y + height + CLEARANCE,
-      }
-    })
-
-  // Allocate separate x tracks to edges sharing the same endpoint nodes. This
-  // is the common case for multi-port blocks (for example CPU imem and dmem).
-  const siblingEdges = edges
-    .filter((edge) => edge.source === props.source && edge.target === props.target)
-    .sort((a, b) => (a.sourceHandle ?? '').localeCompare(b.sourceHandle ?? '')
-      || (a.targetHandle ?? '').localeCompare(b.targetHandle ?? '') || a.id.localeCompare(b.id))
-  const siblingIndex = Math.max(0, siblingEdges.findIndex((edge) => edge.id === props.id))
-  const siblingCount = Math.max(1, siblingEdges.length)
+  const obstacles = nodes.filter((node) => node.id !== props.source && node.id !== props.target).map((node) => {
+    const width = node.measured?.width ?? node.width ?? 196
+    const height = node.measured?.height ?? node.height ?? 96
+    return { left: node.position.x - CLEARANCE, right: node.position.x + width + CLEARANCE, top: node.position.y - CLEARANCE, bottom: node.position.y + height + CLEARANCE }
+  })
+  const siblings = edges.filter((edge) => edge.source === props.source && edge.target === props.target)
+    .sort((a, b) => (a.sourceHandle ?? '').localeCompare(b.sourceHandle ?? '') || (a.targetHandle ?? '').localeCompare(b.targetHandle ?? '') || a.id.localeCompare(b.id))
+  const siblingIndex = Math.max(0, siblings.findIndex((edge) => edge.id === props.id))
   const centerX = (props.sourceX + props.targetX) / 2
-  const preferredTrackX = centerX + (siblingIndex - (siblingCount - 1) / 2) * LANE_GAP
+  const preferredTrackX = centerX + (siblingIndex - (siblings.length - 1) / 2) * LANE_GAP
+  const path = routeEdge({ x: props.sourceX, y: props.sourceY }, { x: props.targetX, y: props.targetY }, obstacles, preferredTrackX)
 
-  const path = routeEdge(
-    { x: props.sourceX, y: props.sourceY },
-    { x: props.targetX, y: props.targetY },
-    obstacles,
-    preferredTrackX,
-  )
-
-  return <BaseEdge
-    id={props.id}
-    path={toPath(path)}
-    markerEnd={props.markerEnd}
-    markerStart={props.markerStart}
-    style={props.style}
-    interactionWidth={props.interactionWidth}
-  />
+  return <BaseEdge id={props.id} path={toPath(path)} markerEnd={props.markerEnd} markerStart={props.markerStart} style={props.style} interactionWidth={props.interactionWidth} />
 }

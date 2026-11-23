@@ -17,7 +17,7 @@ export interface BlockTemplate {
   ports: BlockPort[]
 }
 
-export interface BlockData {
+export interface BlockData extends Record<string, unknown> {
   label: string
   kind: string
   ports: BlockPort[]
