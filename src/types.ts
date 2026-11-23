@@ -1,12 +1,14 @@
 export type PortDirection = 'input' | 'output'
 export type InterfacePortType = 'axi.master' | 'axi.slave'
+export type SignalPortType = 'clock' | 'reset'
+export type BlockPortType = InterfacePortType | SignalPortType
 
 export interface BlockPort {
   id: string
   name: string
   direction: PortDirection
   width?: number
-  type?: InterfacePortType
+  type?: BlockPortType
 }
 
 export interface BlockTemplate {
