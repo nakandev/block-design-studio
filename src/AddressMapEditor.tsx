@@ -5,7 +5,7 @@ import type { AddressMap, AddressMapEntry, BlockPort } from './types'
 interface AddressMapEditorProps {
   open: boolean
   nodeLabel: string
-  slavePorts: BlockPort[]
+  masterPorts: BlockPort[]
   value?: AddressMap
   onCancel: () => void
   onApply: (value: AddressMap) => void
@@ -23,18 +23,18 @@ function formatHex(value: bigint): string {
   return `0x${value.toString(16).toUpperCase()}`
 }
 
-export default function AddressMapEditor({ open, nodeLabel, slavePorts, value, onCancel, onApply }: AddressMapEditorProps) {
+export default function AddressMapEditor({ open, nodeLabel, masterPorts, value, onCancel, onApply }: AddressMapEditorProps) {
   const [addressWidth, setAddressWidth] = useState<32 | 64>(value?.addressWidth ?? 32)
   const [entries, setEntries] = useState<DraftEntry[]>([])
 
   useEffect(() => {
     if (!open) return
     setAddressWidth(value?.addressWidth ?? 32)
-    setEntries(slavePorts.map((port) => {
+    setEntries(masterPorts.map((port) => {
       const existing = value?.entries.find((entry) => entry.portId === port.id)
       return { portId: port.id, baseAddress: existing?.baseAddress ?? '', size: existing?.size ?? '' }
     }))
-  }, [open, slavePorts, value])
+  }, [open, masterPorts, value])
 
   useEffect(() => {
     if (!open) return
@@ -69,18 +69,16 @@ export default function AddressMapEditor({ open, nodeLabel, slavePorts, value, o
       const ae = ranges[i].end!
       const be = ranges[j].end!
       if (a <= be && b <= ae) {
-        ranges[i].status = 'Address range overlaps another slave'
-        ranges[j].status = 'Address range overlaps another slave'
+        ranges[i].status = 'Address range overlaps another master'
+        ranges[j].status = 'Address range overlaps another master'
       }
     }
   }
 
   const canApply = ranges.every((range) => range.status === 'Valid' || range.status === 'Unassigned')
-
   const update = (index: number, field: 'baseAddress' | 'size', text: string) => {
     setEntries((current) => current.map((entry, i) => i === index ? { ...entry, [field]: text } : entry))
   }
-
   const apply = () => {
     onApply({ addressWidth, entries: entries.map(({ portId, baseAddress, size }) => ({
       portId,
@@ -106,7 +104,7 @@ export default function AddressMapEditor({ open, nodeLabel, slavePorts, value, o
         </div>
         <div className="address-map-table-wrap">
           <table className="address-map-table">
-            <thead><tr><th>Slave Port</th><th>Base Address</th><th>Size</th><th>End Address</th><th>Status</th></tr></thead>
+            <thead><tr><th>Master Port</th><th>Base Address</th><th>Size</th><th>End Address</th><th>Status</th></tr></thead>
             <tbody>{ranges.map((range, index) => <tr key={range.portId}>
               <td><strong>{range.portId}</strong></td>
               <td><input aria-label={`${range.portId} base address`} value={entries[index].baseAddress} placeholder="0x40000000" onChange={(event) => update(index, 'baseAddress', event.target.value)} /></td>

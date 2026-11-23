@@ -152,7 +152,7 @@ export default function App() {
 
   const selectedNode = nodes.find((node) => node.id === selectedId)
   const isAxiInterconnect = selectedNode?.data.kind === 'AXI Interconnect'
-  const slavePorts = selectedNode?.data.ports.filter((port) => port.type === 'axi.slave') ?? []
+  const masterPorts = selectedNode?.data.ports.filter((port) => port.type === 'axi.master') ?? []
 
   const getPorts = useCallback((connection: Edge | Connection) => {
     const sourceNode = nodesRef.current.find((node) => node.id === connection.source)
@@ -191,7 +191,7 @@ export default function App() {
     const before = snapshot()
     const id = `${template.kind.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`
     const addressMap: AddressMap | undefined = template.kind === 'AXI Interconnect'
-      ? { addressWidth: 32, entries: template.ports.filter((port) => port.type === 'axi.slave').map((port) => ({ portId: port.id, baseAddress: null, size: null })) }
+      ? { addressWidth: 32, entries: template.ports.filter((port) => port.type === 'axi.master').map((port) => ({ portId: port.id, baseAddress: null, size: null })) }
       : undefined
     const newNode: BlockNode = {
       id, type: 'block', position: { x: 260 + nodesRef.current.length * 24, y: 120 + nodesRef.current.length * 24 },
@@ -307,13 +307,13 @@ export default function App() {
       <aside className="properties panel"><div className="panel-title">Properties</div>{selectedNode ? <div className="property-form">
         <label>Name<input value={selectedNode.data.label} onChange={(event) => updateLabel(event.target.value)} /></label>
         <label>Type<input value={selectedNode.data.kind} readOnly /></label>
-        {isAxiInterconnect && <><button className="address-map-button" onClick={() => setAddressMapNodeId(selectedNode.id)}>Address Map</button><small className="address-map-summary">{selectedNode.data.addressMap?.entries.filter((entry) => entry.baseAddress && entry.size).length ?? 0} of {slavePorts.length} slave ports configured</small></>}
+        {isAxiInterconnect && <><button className="address-map-button" onClick={() => setAddressMapNodeId(selectedNode.id)}>Address Map</button><small className="address-map-summary">{selectedNode.data.addressMap?.entries.filter((entry) => entry.baseAddress && entry.size).length ?? 0} of {masterPorts.length} master ports configured</small></>}
         {(selectedNode.type === 'externalInput' || selectedNode.type === 'externalOutput') && <label>Width (bits)<input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateWidth(Number(event.target.value))} /></label>}
         <div className="property-section"><strong>Ports</strong>{selectedNode.data.ports.map((port) => <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? (port.width !== undefined ? `${port.direction} · ${port.width}-bit` : port.direction)}</small></div>)}</div>
         <button className="danger" onClick={deleteSelected}>Delete node</button>
       </div> : <p className="empty-state">Select a node to edit its properties.</p>}</aside>
     </div>
     <footer className="statusbar"><span role="status">{status}</span><span>{nodes.length} nodes · {edges.length} connections</span></footer>
-    {addressMapNode && <AddressMapEditor open nodeLabel={addressMapNode.data.label} slavePorts={addressMapNode.data.ports.filter((port) => port.type === 'axi.slave')} value={addressMapNode.data.addressMap} onCancel={() => setAddressMapNodeId(null)} onApply={applyAddressMap} />}
+    {addressMapNode && <AddressMapEditor open nodeLabel={addressMapNode.data.label} masterPorts={addressMapNode.data.ports.filter((port) => port.type === 'axi.master')} value={addressMapNode.data.addressMap} onCancel={() => setAddressMapNodeId(null)} onApply={applyAddressMap} />}
   </main>
 }
