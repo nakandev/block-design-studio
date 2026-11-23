@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal, useEdges, useNodes } from '@xyflow/react'
 import type { AddressMap, AddressMapEntry, BlockPort } from './types'
 
 interface AddressMapEditorProps {
@@ -24,8 +24,28 @@ function formatHex(value: bigint): string {
 }
 
 export default function AddressMapEditor({ open, nodeLabel, masterPorts, value, onCancel, onApply }: AddressMapEditorProps) {
+  const flowNodes = useNodes()
+  const flowEdges = useEdges()
   const [addressWidth, setAddressWidth] = useState<32 | 64>(value?.addressWidth ?? 32)
   const [entries, setEntries] = useState<DraftEntry[]>([])
+
+  const interconnectNode = flowNodes.find((node) => node.selected && node.data.kind === 'AXI Interconnect')
+    ?? flowNodes.find((node) => node.data.kind === 'AXI Interconnect' && node.data.label === nodeLabel && node.data.addressMap === value)
+  const connectedSlaves = useMemo(() => {
+    const connections = new Map<string, string>()
+    if (!interconnectNode) return connections
+
+    for (const port of masterPorts) {
+      const edge = flowEdges.find((candidate) => candidate.source === interconnectNode.id && candidate.sourceHandle === port.id)
+      if (!edge) continue
+      const slaveNode = flowNodes.find((node) => node.id === edge.target)
+      if (!slaveNode) continue
+      const slavePort = slaveNode.data.ports?.find((candidate: BlockPort) => candidate.id === edge.targetHandle)
+      const details = [slaveNode.data.label, slaveNode.data.kind, slavePort?.name].filter(Boolean).join(' · ')
+      connections.set(port.id, details || slaveNode.id)
+    }
+    return connections
+  }, [flowEdges, flowNodes, interconnectNode, masterPorts])
 
   useEffect(() => {
     if (!open) return
@@ -104,9 +124,10 @@ export default function AddressMapEditor({ open, nodeLabel, masterPorts, value, 
         </div>
         <div className="address-map-table-wrap">
           <table className="address-map-table">
-            <thead><tr><th>Master Port</th><th>Base Address</th><th>Size</th><th>End Address</th><th>Status</th></tr></thead>
+            <thead><tr><th>Master Port</th><th>Connected Slave</th><th>Base Address</th><th>Size</th><th>End Address</th><th>Status</th></tr></thead>
             <tbody>{ranges.map((range, index) => <tr key={range.portId}>
               <td><strong>{range.portId}</strong></td>
+              <td>{connectedSlaves.get(range.portId) ?? <span className="address-map-status unassigned">Not connected</span>}</td>
               <td><input aria-label={`${range.portId} base address`} value={entries[index].baseAddress} placeholder="0x40000000" onChange={(event) => update(index, 'baseAddress', event.target.value)} /></td>
               <td><input aria-label={`${range.portId} size`} value={entries[index].size} placeholder="0x10000" onChange={(event) => update(index, 'size', event.target.value)} /></td>
               <td className="end-address">{range.end === null ? '—' : formatHex(range.end)}</td>
