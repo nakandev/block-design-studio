@@ -1,5 +1,5 @@
 export type PortDirection = 'input' | 'output'
-export type InterfacePortType = 'axi.master' | 'axi.slave' | 'i2c.master' | 'i2c.slave'
+export type InterfacePortType = `${string}.master` | `${string}.slave`
 export type SignalPortType = 'clock' | 'reset'
 export type BlockPortType = InterfacePortType | SignalPortType
 
@@ -9,6 +9,11 @@ export interface BlockPort {
   direction: PortDirection
   width?: number
   type?: BlockPortType
+}
+
+export interface InterfaceDefinition {
+  name: string
+  label: string
 }
 
 export interface BlockTemplate {

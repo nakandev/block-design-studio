@@ -1,0 +1,4 @@
+[
+  { "name": "axi", "label": "AXI" },
+  { "name": "i2c", "label": "I2C" }
+]

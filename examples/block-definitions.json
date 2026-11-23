@@ -1,29 +1,35 @@
-[
-  {
-    "kind": "Counter",
-    "label": "Counter",
-    "ports": [
-      { "id": "clk", "name": "clk", "direction": "input", "width": 1 },
-      { "id": "count", "name": "count", "direction": "output", "width": 32 }
-    ]
-  },
-  {
-    "kind": "CPU",
-    "label": "CPU",
-    "ports": [
-      { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
-      { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
-      { "id": "imem", "name": "imem", "direction": "output", "type": "axi.master" },
-      { "id": "dmem", "name": "dmem", "direction": "output", "type": "axi.master" }
-    ]
-  },
-  {
-    "kind": "AXI_I2C",
-    "label": "AXI_I2C",
-    "ports": [
-      { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
-      { "id": "slave", "name": "slave", "direction": "input", "type": "axi.slave" },
-      { "id": "i2c", "name": "i2c", "direction": "output", "type": "i2c.master" }
-    ]
-  }
-]
+{
+  "interfaces": [
+    { "name": "axi", "label": "AXI" },
+    { "name": "i2c", "label": "I2C" }
+  ],
+  "blocks": [
+    {
+      "kind": "Counter",
+      "label": "Counter",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "width": 1 },
+        { "id": "count", "name": "count", "direction": "output", "width": 32 }
+      ]
+    },
+    {
+      "kind": "CPU",
+      "label": "CPU",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "imem", "name": "imem", "direction": "output", "type": "axi.master" },
+        { "id": "dmem", "name": "dmem", "direction": "output", "type": "axi.master" }
+      ]
+    },
+    {
+      "kind": "AXI_I2C",
+      "label": "AXI_I2C",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "slave", "name": "slave", "direction": "input", "type": "axi.slave" },
+        { "id": "i2c", "name": "i2c", "direction": "output", "type": "i2c.master" }
+      ]
+    }
+  ]
+}
