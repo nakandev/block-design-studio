@@ -16,13 +16,12 @@ export default function BlockNodeView({ data, selected }: NodeProps<BlockNode>) 
 
       <div className="ports">
         <div className="input-ports">
-          {inputs.map((port, index) => (
+          {inputs.map((port) => (
             <div className="port-row input-row" key={port.id}>
               <Handle
                 type="target"
                 position={Position.Left}
                 id={port.id}
-                style={{ top: 58 + index * 26 }}
                 className="port-handle input-handle"
               />
               <span>{port.name}</span>
@@ -32,13 +31,12 @@ export default function BlockNodeView({ data, selected }: NodeProps<BlockNode>) 
         </div>
 
         <div className="output-ports">
-          {outputs.map((port, index) => (
+          {outputs.map((port) => (
             <div className="port-row output-row" key={port.id}>
               <Handle
                 type="source"
                 position={Position.Right}
                 id={port.id}
-                style={{ top: 58 + index * 26 }}
                 className="port-handle output-handle"
               />
               <span>{port.name}</span>
