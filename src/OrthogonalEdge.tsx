@@ -8,6 +8,7 @@ type Segment = { a: Point; b: Point }
 const STUB = 24
 const CLEARANCE = 12
 const LANE_GAP = 24
+const TRACK_PENALTY = 12
 
 function simplify(points: Point[]): Point[] {
   const result: Point[] = []
@@ -50,21 +51,11 @@ function toSegments(points: Point[]): Segment[] {
   return points.slice(1).map((point, index) => ({ a: points[index], b: point }))
 }
 
-function overlapsVertical(a: Segment, b: Segment): boolean {
-  if (a.a.x !== a.b.x || b.a.x !== b.b.x || a.a.x !== b.a.x) return false
-  const aTop = Math.min(a.a.y, a.b.y)
-  const aBottom = Math.max(a.a.y, a.b.y)
-  const bTop = Math.min(b.a.y, b.b.y)
-  const bBottom = Math.max(b.a.y, b.b.y)
-  return Math.min(aBottom, bBottom) - Math.max(aTop, bTop) > 1
-}
-
 function routeEdge(
   source: Point,
   target: Point,
   obstacles: Obstacle[],
-  reservedSegments: Segment[],
-  lane: number,
+  preferredTrackX: number,
 ): Point[] {
   const start = { x: source.x + STUB, y: source.y }
   const end = { x: target.x - STUB, y: target.y }
@@ -73,11 +64,10 @@ function routeEdge(
   const minY = Math.min(source.y, target.y, ...obstacles.map((item) => item.top)) - CLEARANCE * 3
   const maxY = Math.max(source.y, target.y, ...obstacles.map((item) => item.bottom)) + CLEARANCE * 3
 
-  const xs = new Set<number>([start.x, end.x, (start.x + end.x) / 2])
+  const xs = new Set<number>([start.x, end.x, preferredTrackX])
   const ys = new Set<number>([source.y, target.y, (source.y + target.y) / 2])
   for (let x = minX; x <= maxX; x += LANE_GAP) xs.add(x)
   for (let y = minY; y <= maxY; y += LANE_GAP) ys.add(y)
-
   for (const obstacle of obstacles) {
     xs.add(obstacle.left - CLEARANCE)
     xs.add(obstacle.right + CLEARANCE)
@@ -85,21 +75,14 @@ function routeEdge(
     ys.add(obstacle.bottom + CLEARANCE)
   }
 
-  const verticalXs = [...xs].sort((a, b) => {
-    if (lane < 0) return a - b
-    if (lane > 0) return b - a
-    return Math.abs(a - (start.x + end.x) / 2) - Math.abs(b - (start.x + end.x) / 2)
-  })
-  const horizontalYs = [...ys].sort((a, b) => {
-    const preferredA = (source.y + target.y) / 2 + lane * LANE_GAP
-    return Math.abs(a - preferredA) - Math.abs(b - preferredA)
-  })
+  const verticalXs = [...xs].sort((a, b) => Math.abs(a - preferredTrackX) - Math.abs(b - preferredTrackX))
+  const horizontalYs = [...ys].sort((a, b) =>
+    Math.abs(a - (source.y + target.y) / 2) - Math.abs(b - (source.y + target.y) / 2),
+  )
 
   let best: Point[] | undefined
   let bestScore = Number.POSITIVE_INFINITY
 
-  // Prefer a three-segment orthogonal route first. These routes keep all
-  // verticals at distinct x coordinates and are usually visually cleaner.
   for (const middleX of verticalXs) {
     for (const middleY of horizontalYs) {
       const candidates = [
@@ -113,20 +96,15 @@ function routeEdge(
         const segments = toSegments(candidate)
         if (segments.some((segment) => obstacles.some((obstacle) => intersectsObstacle(segment.a, segment.b, obstacle)))) continue
 
-        const newVerticalSegments = segments.filter((segment) => segment.a.x === segment.b.x)
-        const overlaps = newVerticalSegments.reduce((count, segment) =>
-          count + reservedSegments.filter((reserved) => overlapsVertical(segment, reserved)).length,
-        0)
-        const uniqueVerticalXs = new Set(newVerticalSegments.map((segment) => segment.a.x)).size
         const length = segments.reduce((total, segment) =>
           total + Math.abs(segment.b.x - segment.a.x) + Math.abs(segment.b.y - segment.a.y), 0)
-        const bends = candidate.length - 2
-        const yBalance = newVerticalSegments.reduce((total, segment) => {
-          const mid = (segment.a.y + segment.b.y) / 2
-          return total + Math.abs(mid - (source.y + target.y) / 2)
-        }, 0)
-        const score = length + bends * 30 + overlaps * 500 + yBalance * 0.08
-          + Math.abs(middleX - (start.x + end.x) / 2) * 0.04
+        const verticalSegments = segments.filter((segment) => segment.a.x === segment.b.x)
+        // Penalize vertical segments away from this connection's assigned lane.
+        // Edges sharing a source/target pair receive distinct lanes, so their
+        // long vertical runs no longer sit on top of each other.
+        const trackDeviation = verticalSegments.reduce((total, segment) =>
+          total + Math.abs(segment.a.x - preferredTrackX), 0)
+        const score = length + Math.max(0, candidate.length - 2) * 30 + trackDeviation * TRACK_PENALTY
 
         if (score < bestScore) {
           best = candidate
@@ -137,8 +115,8 @@ function routeEdge(
   }
 
   if (!best) {
-    const outsideLane = minY - LANE_GAP * (Math.abs(lane) + 1)
-    best = [source, start, { x: start.x, y: outsideLane }, { x: end.x, y: outsideLane }, end, target]
+    const outsideLane = minY - LANE_GAP
+    best = [source, start, { x: preferredTrackX, y: outsideLane }, { x: end.x, y: outsideLane }, end, target]
   }
   return best
 }
@@ -167,33 +145,22 @@ export default function OrthogonalEdge(props: EdgeProps) {
       }
     })
 
-  const orderedEdges = [...edges].sort((a, b) => a.id.localeCompare(b.id))
-  const edgeIndex = orderedEdges.findIndex((edge) => edge.id === props.id)
-  const lane = edgeIndex === 0 ? 0 : (edgeIndex % 2 ? 1 : -1) * Math.ceil(edgeIndex / 2)
-
-  const reservedSegments: Segment[] = []
-  // Reserve already-routed vertical segments by endpoint distance. When all
-  // visible routing calculations are based on the same grid, this prevents
-  // independent edges from choosing the exact same vertical x coordinate.
-  for (const edge of orderedEdges) {
-    if (edge.id === props.id) break
-    const source = nodes.find((node) => node.id === edge.source)
-    const target = nodes.find((node) => node.id === edge.target)
-    if (!source || !target) continue
-    const sourceX = edge.sourceHandle ? props.sourceX : source.position.x
-    const targetX = edge.targetHandle ? props.targetX : target.position.x
-    const sourceY = source.position.y
-    const targetY = target.position.y
-    reservedSegments.push({ a: { x: sourceX, y: sourceY }, b: { x: sourceX, y: targetY } })
-    reservedSegments.push({ a: { x: targetX, y: sourceY }, b: { x: targetX, y: targetY } })
-  }
+  // Allocate separate x tracks to edges sharing the same endpoint nodes. This
+  // is the common case for multi-port blocks (for example CPU imem and dmem).
+  const siblingEdges = edges
+    .filter((edge) => edge.source === props.source && edge.target === props.target)
+    .sort((a, b) => (a.sourceHandle ?? '').localeCompare(b.sourceHandle ?? '')
+      || (a.targetHandle ?? '').localeCompare(b.targetHandle ?? '') || a.id.localeCompare(b.id))
+  const siblingIndex = Math.max(0, siblingEdges.findIndex((edge) => edge.id === props.id))
+  const siblingCount = Math.max(1, siblingEdges.length)
+  const centerX = (props.sourceX + props.targetX) / 2
+  const preferredTrackX = centerX + (siblingIndex - (siblingCount - 1) / 2) * LANE_GAP
 
   const path = routeEdge(
     { x: props.sourceX, y: props.sourceY },
     { x: props.targetX, y: props.targetY },
     obstacles,
-    reservedSegments,
-    lane,
+    preferredTrackX,
   )
 
   return <BaseEdge
