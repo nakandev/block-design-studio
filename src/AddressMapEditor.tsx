@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPortal, useEdges, useNodes } from '@xyflow/react'
+import { createPortal } from 'react-dom'
+import { useEdges, useNodes } from '@xyflow/react'
 import type { AddressMap, AddressMapEntry, BlockPort } from './types'
 
 interface AddressMapEditorProps {
