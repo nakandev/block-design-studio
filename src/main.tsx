@@ -6,10 +6,4 @@ import App from './App'
 import './styles.css'
 import './external-input.css'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ReactFlowProvider>
-      <App />
-    </ReactFlowProvider>
-  </React.StrictMode>,
-)
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><ReactFlowProvider><App /></ReactFlowProvider></React.StrictMode>)
