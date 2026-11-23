@@ -1,2 +1,26 @@
-# block-design-studio
-A visual block-design editor for creating and saving block diagrams, inspired by Vivado IP Integrator.
+# Block Design Studio
+
+ブロック図を配置・配線し、ブラウザまたはJSONファイルとして保存できるエディターです。
+
+## セットアップ
+
+```bash
+npm install
+npm run dev
+```
+
+## ビルド
+
+```bash
+npm run build
+```
+
+## MVP機能
+
+- ブロックライブラリからブロックを追加
+- ノードの移動・選択・削除
+- 入力ポートへの接続制限
+- ブラウザストレージへの保存と復元
+- 設計のJSONエクスポートと読み込み
+- プロパティサイドバー
+- ズーム、パン、ミニマップ、グリッドスナップ
