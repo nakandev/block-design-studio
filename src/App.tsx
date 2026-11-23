@@ -1,6 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
   Background,
   BackgroundVariant,
   Controls,
@@ -11,7 +13,8 @@ import {
   useEdgesState,
   type Connection,
   type Edge,
-  type Node,
+  type EdgeChange,
+  type NodeChange,
   type NodeTypes,
   type OnSelectionChangeParams,
 } from '@xyflow/react'
@@ -19,150 +22,233 @@ import BlockNodeView, { type BlockNode } from './BlockNode'
 import type { BlockData, DesignDocument } from './types'
 
 const STORAGE_KEY = 'block-design-studio-document-v1'
-
+const HISTORY_LIMIT = 100
 const nodeTypes: NodeTypes = { block: BlockNodeView }
 
+interface Snapshot {
+  nodes: BlockNode[]
+  edges: Edge[]
+}
+
 const blockTemplates: Array<{ kind: string; label: string; ports: BlockData['ports'] }> = [
-  {
-    kind: 'Input',
-    label: 'Input',
-    ports: [{ id: 'data', name: 'data', direction: 'output', width: 32 }],
-  },
-  {
-    kind: 'Output',
-    label: 'Output',
-    ports: [{ id: 'data', name: 'data', direction: 'input', width: 32 }],
-  },
-  {
-    kind: 'Arithmetic',
-    label: 'Adder',
-    ports: [
-      { id: 'a', name: 'a', direction: 'input', width: 32 },
-      { id: 'b', name: 'b', direction: 'input', width: 32 },
-      { id: 'sum', name: 'sum', direction: 'output', width: 32 },
-    ],
-  },
-  {
-    kind: 'Storage',
-    label: 'Register',
-    ports: [
-      { id: 'clk', name: 'clk', direction: 'input', width: 1 },
-      { id: 'din', name: 'din', direction: 'input', width: 32 },
-      { id: 'dout', name: 'dout', direction: 'output', width: 32 },
-    ],
-  },
+  { kind: 'Input', label: 'Input', ports: [{ id: 'data', name: 'data', direction: 'output', width: 32 }] },
+  { kind: 'Output', label: 'Output', ports: [{ id: 'data', name: 'data', direction: 'input', width: 32 }] },
+  { kind: 'Arithmetic', label: 'Adder', ports: [
+    { id: 'a', name: 'a', direction: 'input', width: 32 },
+    { id: 'b', name: 'b', direction: 'input', width: 32 },
+    { id: 'sum', name: 'sum', direction: 'output', width: 32 },
+  ] },
+  { kind: 'Storage', label: 'Register', ports: [
+    { id: 'clk', name: 'clk', direction: 'input', width: 1 },
+    { id: 'din', name: 'din', direction: 'input', width: 32 },
+    { id: 'dout', name: 'dout', direction: 'output', width: 32 },
+  ] },
 ]
 
 function createInitialNodes(): BlockNode[] {
-  return [
-    {
-      id: 'input_1',
-      type: 'block',
-      position: { x: 80, y: 180 },
-      data: {
-        label: 'Input',
-        kind: 'Input',
-        ports: blockTemplates[0].ports,
-        parameters: {},
-      },
-    },
-  ]
+  return [{
+    id: 'input_1', type: 'block', position: { x: 80, y: 180 },
+    data: { label: 'Input', kind: 'Input', ports: blockTemplates[0].ports, parameters: {} },
+  }]
 }
 
 export default function App() {
-  const [nodes, setNodes, onNodesChange] = useNodesState<BlockNode>(createInitialNodes())
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const [nodes, setNodes, onNodesChangeBase] = useNodesState<BlockNode>(createInitialNodes())
+  const [edges, setEdges, onEdgesChangeBase] = useEdgesState<Edge>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [designName, setDesignName] = useState('untitled')
   const [status, setStatus] = useState('Ready')
+  const [historyVersion, setHistoryVersion] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const pastRef = useRef<Snapshot[]>([])
+  const futureRef = useRef<Snapshot[]>([])
+  const nodesRef = useRef(nodes)
+  const edgesRef = useRef(edges)
+  const dragStartRef = useRef<Snapshot | null>(null)
+  const labelEditStartRef = useRef<Snapshot | null>(null)
+
+  nodesRef.current = nodes
+  edgesRef.current = edges
+
+  const refreshHistoryState = useCallback(() => {
+    setHistoryVersion((version) => version + 1)
+  }, [])
+
+  const snapshot = useCallback((): Snapshot => ({
+    nodes: nodesRef.current,
+    edges: edgesRef.current,
+  }), [])
+
+  const applyTransition = useCallback((before: Snapshot, after: Snapshot) => {
+    if (before.nodes === after.nodes && before.edges === after.edges) return
+    pastRef.current = [...pastRef.current, before].slice(-HISTORY_LIMIT)
+    futureRef.current = []
+    refreshHistoryState()
+  }, [refreshHistoryState])
+
+  const replaceDocument = useCallback((nextNodes: BlockNode[], nextEdges: Edge[]) => {
+    nodesRef.current = nextNodes
+    edgesRef.current = nextEdges
+    setNodes(nextNodes)
+    setEdges(nextEdges)
+  }, [setEdges, setNodes])
+
+  const undo = useCallback(() => {
+    const previous = pastRef.current.at(-1)
+    if (!previous) return
+    pastRef.current = pastRef.current.slice(0, -1)
+    futureRef.current = [...futureRef.current, snapshot()].slice(-HISTORY_LIMIT)
+    replaceDocument(previous.nodes, previous.edges)
+    setSelectedNodeId(null)
+    setStatus('Undo')
+  }, [replaceDocument, snapshot])
+
+  const redo = useCallback(() => {
+    const next = futureRef.current.at(-1)
+    if (!next) return
+    futureRef.current = futureRef.current.slice(0, -1)
+    pastRef.current = [...pastRef.current, snapshot()].slice(-HISTORY_LIMIT)
+    replaceDocument(next.nodes, next.edges)
+    setSelectedNodeId(null)
+    setStatus('Redo')
+  }, [replaceDocument, snapshot])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return
+      const key = event.key.toLowerCase()
+
+      if (key === 'z') {
+        event.preventEvent?.()
+        event.preventDefault()
+        if (event.shiftKey) redo()
+        else undo()
+      } else if (key === 'y') {
+        event.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [redo, undo])
+
+  const canUndo = pastRef.current.length > 0
+  const canRedo = futureRef.current.length > 0
+  void historyVersion
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId)
 
-  const onConnect = useCallback((connection: Connection) => {
-    setEdges((currentEdges) => {
-      const targetAlreadyConnected = currentEdges.some((edge) =>
-        edge.target === connection.target && edge.targetHandle === connection.targetHandle,
-      )
-      if (targetAlreadyConnected) {
-        setStatus('This input port is already connected')
-        return currentEdges
-      }
+  const onNodesChange = useCallback((changes: NodeChange<BlockNode>[]) => {
+    const before = snapshot()
+    const nextNodes = applyNodeChanges(changes, nodesRef.current) as BlockNode[]
+    nodesRef.current = nextNodes
+    onNodesChangeBase(changes)
 
-      setStatus('Connection created')
-      return addEdge({
-        ...connection,
-        type: 'smoothstep',
-        markerEnd: { type: MarkerType.ArrowClosed },
-      }, currentEdges)
-    })
-  }, [setEdges])
+    const structuralChange = changes.some((change) =>
+      change.type === 'remove' || change.type === 'add' || change.type === 'replace',
+    )
+    if (structuralChange) {
+      applyTransition(before, { nodes: nextNodes, edges: edgesRef.current })
+    }
+  }, [applyTransition, onNodesChangeBase, snapshot])
+
+  const onEdgesChange = useCallback((changes: EdgeChange<Edge>[]) => {
+    const before = snapshot()
+    const nextEdges = applyEdgeChanges(changes, edgesRef.current)
+    edgesRef.current = nextEdges
+    onEdgesChangeBase(changes)
+
+    const removal = changes.some((change) => change.type === 'remove')
+    if (removal) {
+      applyTransition(before, { nodes: nodesRef.current, edges: nextEdges })
+    }
+  }, [applyTransition, onEdgesChangeBase, snapshot])
+
+  const onConnect = useCallback((connection: Connection) => {
+    const before = snapshot()
+    const targetAlreadyConnected = edgesRef.current.some((edge) =>
+      edge.target === connection.target && edge.targetHandle === connection.targetHandle,
+    )
+    if (targetAlreadyConnected) {
+      setStatus('This input port is already connected')
+      return
+    }
+
+    const nextEdges = addEdge({
+      ...connection,
+      type: 'smoothstep',
+      markerEnd: { type: MarkerType.ArrowClosed },
+    }, edgesRef.current)
+    edgesRef.current = nextEdges
+    setEdges(nextEdges)
+    applyTransition(before, { nodes: nodesRef.current, edges: nextEdges })
+    setStatus('Connection created')
+  }, [applyTransition, setEdges, snapshot])
 
   const isValidConnection = useCallback((connection: Edge | Connection) => {
     if (!connection.source || !connection.target) return false
     if (connection.source === connection.target) return false
 
-    const sourceNode = nodes.find((node) => node.id === connection.source)
-    const targetNode = nodes.find((node) => node.id === connection.target)
+    const sourceNode = nodesRef.current.find((node) => node.id === connection.source)
+    const targetNode = nodesRef.current.find((node) => node.id === connection.target)
     const sourcePort = sourceNode?.data.ports.find((port) => port.id === connection.sourceHandle)
     const targetPort = targetNode?.data.ports.find((port) => port.id === connection.targetHandle)
-
     return sourcePort?.direction === 'output' && targetPort?.direction === 'input'
-  }, [nodes])
+  }, [])
 
   const onSelectionChange = useCallback(({ nodes: selectedNodes }: OnSelectionChangeParams) => {
     setSelectedNodeId(selectedNodes.length === 1 ? selectedNodes[0].id : null)
   }, [])
 
   const addBlock = useCallback((templateIndex: number) => {
+    const before = snapshot()
     const template = blockTemplates[templateIndex]
     const id = `${template.kind.toLowerCase()}_${Date.now()}`
-    const offset = nodes.length * 24
-
-    setNodes((currentNodes) => [...currentNodes, {
-      id,
-      type: 'block',
-      position: { x: 260 + offset, y: 120 + offset },
+    const offset = nodesRef.current.length * 24
+    const nextNodes = [...nodesRef.current, {
+      id, type: 'block', position: { x: 260 + offset, y: 120 + offset },
       data: {
         label: template.label,
         kind: template.kind,
         ports: template.ports.map((port) => ({ ...port })),
         parameters: {},
       },
-    }])
+    }] as BlockNode[]
+    nodesRef.current = nextNodes
+    setNodes(nextNodes)
+    applyTransition(before, { nodes: nextNodes, edges: edgesRef.current })
     setSelectedNodeId(id)
     setStatus(`${template.label} added`)
-  }, [nodes.length, setNodes])
+  }, [applyTransition, setNodes, snapshot])
 
   const deleteSelected = useCallback(() => {
     if (!selectedNodeId) return
-    setNodes((currentNodes) => currentNodes.filter((node) => node.id !== selectedNodeId))
-    setEdges((currentEdges) => currentEdges.filter((edge) =>
+    const before = snapshot()
+    const nextNodes = nodesRef.current.filter((node) => node.id !== selectedNodeId)
+    const nextEdges = edgesRef.current.filter((edge) =>
       edge.source !== selectedNodeId && edge.target !== selectedNodeId,
-    ))
+    )
+    replaceDocument(nextNodes, nextEdges)
+    applyTransition(before, { nodes: nextNodes, edges: nextEdges })
     setSelectedNodeId(null)
     setStatus('Block deleted')
-  }, [selectedNodeId, setEdges, setNodes])
+  }, [applyTransition, replaceDocument, selectedNodeId, snapshot])
 
   const updateSelectedLabel = useCallback((label: string) => {
     if (!selectedNodeId) return
-    setNodes((currentNodes) => currentNodes.map((node) =>
-      node.id === selectedNodeId
-        ? { ...node, data: { ...node.data, label } }
-        : node,
-    ))
+    const nextNodes = nodesRef.current.map((node) =>
+      node.id === selectedNodeId ? { ...node, data: { ...node.data, label } } : node,
+    ) as BlockNode[]
+    nodesRef.current = nextNodes
+    setNodes(nextNodes)
   }, [selectedNodeId, setNodes])
 
   const makeDocument = useCallback((): DesignDocument => ({
-    version: 1,
-    name: designName,
-    nodes,
-    edges,
-  }), [designName, nodes, edges])
+    version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current,
+  }), [designName])
 
   const saveDocument = useCallback(() => {
-    const document = makeDocument()
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(document))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(makeDocument()))
     setStatus('Saved in browser storage')
   }, [makeDocument])
 
@@ -183,62 +269,51 @@ export default function App() {
       if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) {
         throw new Error('Unsupported design format')
       }
-      setNodes(document.nodes as BlockNode[])
-      setEdges(document.edges as Edge[])
+      const before = snapshot()
+      const nextNodes = document.nodes as BlockNode[]
+      const nextEdges = document.edges as Edge[]
+      replaceDocument(nextNodes, nextEdges)
+      applyTransition(before, { nodes: nextNodes, edges: nextEdges })
       setDesignName(document.name || 'untitled')
       setSelectedNodeId(null)
       setStatus('Design opened')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Could not open design')
     }
-  }, [setEdges, setNodes])
+  }, [applyTransition, replaceDocument, snapshot])
 
   const restoreLastSaved = useCallback(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
-    if (!saved) {
-      setStatus('No saved design found')
-      return
-    }
+    if (!saved) { setStatus('No saved design found'); return }
     try {
       const document = JSON.parse(saved) as DesignDocument
-      setNodes(document.nodes as BlockNode[])
-      setEdges(document.edges as Edge[])
+      const before = snapshot()
+      const nextNodes = document.nodes as BlockNode[]
+      const nextEdges = document.edges as Edge[]
+      replaceDocument(nextNodes, nextEdges)
+      applyTransition(before, { nodes: nextNodes, edges: nextEdges })
       setDesignName(document.name || 'untitled')
       setStatus('Last saved design restored')
-    } catch {
-      setStatus('Saved design could not be restored')
-    }
-  }, [setEdges, setNodes])
+    } catch { setStatus('Saved design could not be restored') }
+  }, [applyTransition, replaceDocument, snapshot])
 
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark">BD</div>
-          <strong>Block Design Studio</strong>
-        </div>
-        <input
-          className="design-name"
-          value={designName}
-          onChange={(event) => setDesignName(event.target.value)}
-          aria-label="Design name"
-        />
+        <div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div>
+        <input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" />
         <div className="top-actions">
+          <button className="history-button" onClick={undo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)">↶</button>
+          <button className="history-button" onClick={redo} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)">↷</button>
           <button onClick={restoreLastSaved}>Restore</button>
           <button onClick={saveDocument}>Save</button>
           <button className="primary" onClick={exportDocument}>Export JSON</button>
           <button onClick={() => fileInputRef.current?.click()}>Open</button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void openDocument(file)
-              event.target.value = ''
-            }}
-          />
+          <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (file) void openDocument(file)
+            event.target.value = ''
+          }} />
         </div>
       </header>
 
@@ -246,39 +321,29 @@ export default function App() {
         <aside className="palette panel">
           <div className="panel-title">Block Library</div>
           {blockTemplates.map((template, index) => (
-            <button
-              className="library-item"
-              key={template.label}
-              onClick={() => addBlock(index)}
-            >
+            <button className="library-item" key={template.label} onClick={() => addBlock(index)}>
               <span className="library-icon">{template.kind.slice(0, 1)}</span>
-              <span>
-                <strong>{template.label}</strong>
-                <small>{template.kind}</small>
-              </span>
+              <span><strong>{template.label}</strong><small>{template.kind}</small></span>
             </button>
           ))}
         </aside>
 
         <section className="canvas-panel">
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            isValidConnection={isValidConnection}
+            nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+            onConnect={onConnect} isValidConnection={isValidConnection}
             onSelectionChange={onSelectionChange}
-            fitView
-            snapToGrid
-            snapGrid={[16, 16]}
-            deleteKeyCode={['Backspace', 'Delete']}
-            colorMode="light"
+            onNodeDragStart={() => { dragStartRef.current = snapshot() }}
+            onNodeDragStop={() => {
+              if (!dragStartRef.current) return
+              applyTransition(dragStartRef.current, snapshot())
+              dragStartRef.current = null
+            }}
+            fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']} colorMode="light"
           >
             <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-            <Controls />
-            <MiniMap pannable zoomable nodeStrokeWidth={3} />
+            <Controls /><MiniMap pannable zoomable nodeStrokeWidth={3} />
           </ReactFlow>
         </section>
 
@@ -286,38 +351,32 @@ export default function App() {
           <div className="panel-title">Properties</div>
           {selectedNode ? (
             <div className="property-form">
-              <label>
-                Name
+              <label>Name
                 <input
                   value={selectedNode.data.label}
+                  onFocus={() => { labelEditStartRef.current = snapshot() }}
                   onChange={(event) => updateSelectedLabel(event.target.value)}
+                  onBlur={() => {
+                    if (labelEditStartRef.current) {
+                      applyTransition(labelEditStartRef.current, snapshot())
+                      labelEditStartRef.current = null
+                    }
+                  }}
                 />
               </label>
-              <label>
-                Type
-                <input value={selectedNode.data.kind} readOnly />
-              </label>
-              <div className="property-section">
-                <strong>Ports</strong>
+              <label>Type<input value={selectedNode.data.kind} readOnly /></label>
+              <div className="property-section"><strong>Ports</strong>
                 {selectedNode.data.ports.map((port) => (
-                  <div className="port-property" key={port.id}>
-                    <span>{port.name}</span>
-                    <small>{port.direction} · {port.width}-bit</small>
-                  </div>
+                  <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.direction} · {port.width}-bit</small></div>
                 ))}
               </div>
               <button className="danger" onClick={deleteSelected}>Delete block</button>
             </div>
-          ) : (
-            <p className="empty-state">Select a block to edit its properties.</p>
-          )}
+          ) : <p className="empty-state">Select a block to edit its properties.</p>}
         </aside>
       </div>
 
-      <footer className="statusbar">
-        <span>{status}</span>
-        <span>{nodes.length} blocks · {edges.length} connections</span>
-      </footer>
+      <footer className="statusbar"><span>{status}</span><span>{nodes.length} blocks · {edges.length} connections</span></footer>
     </main>
   )
 }
