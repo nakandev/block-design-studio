@@ -5,7 +5,6 @@ export interface BlockPort {
   id: string
   name: string
   direction: PortDirection
-  /** Omit for interface ports whose compatibility is determined by type. */
   width?: number
   type?: InterfacePortType
 }

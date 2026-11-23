@@ -20,6 +20,7 @@ import {
 } from '@xyflow/react'
 import BlockNodeView, { type BlockNode } from './BlockNode'
 import ExternalInputNodeView from './ExternalInputNode'
+import ExternalOutputNodeView from './ExternalOutputNode'
 import type { BlockPort, DesignDocument } from './types'
 
 const STORAGE_KEY = 'block-design-studio-document-v1'
@@ -27,6 +28,7 @@ const HISTORY_LIMIT = 100
 const nodeTypes: NodeTypes = {
   block: BlockNodeView,
   externalInput: ExternalInputNodeView,
+  externalOutput: ExternalOutputNodeView,
 }
 
 interface Snapshot {
@@ -259,6 +261,28 @@ export default function App() {
     setStatus('External input added')
   }, [applyTransition, setNodes, snapshot])
 
+  const addExternalOutput = useCallback(() => {
+    const before = snapshot()
+    const id = `external_output_${Date.now()}`
+    const offset = nodesRef.current.filter((node) => node.type === 'externalOutput').length * 64
+    const nextNodes = [...nodesRef.current, {
+      id,
+      type: 'externalOutput',
+      position: { x: 520, y: 140 + offset },
+      data: {
+        label: 'external_output',
+        kind: 'External Output',
+        ports: [{ id: 'external_input', name: 'external_output', direction: 'input', width: 1 }],
+        parameters: {},
+      },
+    }] as BlockNode[]
+    nodesRef.current = nextNodes
+    setNodes(nextNodes)
+    applyTransition(before, { nodes: nextNodes, edges: edgesRef.current })
+    setSelectedNodeId(id)
+    setStatus('External output added')
+  }, [applyTransition, setNodes, snapshot])
+
   const deleteSelected = useCallback(() => {
     if (!selectedNodeId) return
     const before = snapshot()
@@ -267,20 +291,20 @@ export default function App() {
     replaceDocument(nextNodes, nextEdges)
     applyTransition(before, { nodes: nextNodes, edges: nextEdges })
     setSelectedNodeId(null)
-    setStatus('Block deleted')
+    setStatus('Node deleted')
   }, [applyTransition, replaceDocument, selectedNodeId, snapshot])
 
   const updateSelectedLabel = useCallback((label: string) => {
     if (!selectedNodeId) return
     const nextNodes = nodesRef.current.map((node) => {
       if (node.id !== selectedNodeId) return node
-      const isExternalInput = node.type === 'externalInput'
+      const isExternal = node.type === 'externalInput' || node.type === 'externalOutput'
       return {
         ...node,
         data: {
           ...node.data,
           label,
-          ports: isExternalInput
+          ports: isExternal
             ? node.data.ports.map((port) => ({ ...port, name: label }))
             : node.data.ports,
         },
@@ -324,10 +348,8 @@ export default function App() {
       const document = JSON.parse(await file.text()) as DesignDocument
       if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format')
       const before = snapshot()
-      const nextNodes = document.nodes as BlockNode[]
-      const nextEdges = document.edges as Edge[]
-      replaceDocument(nextNodes, nextEdges)
-      applyTransition(before, { nodes: nextNodes, edges: nextEdges })
+      replaceDocument(document.nodes as BlockNode[], document.edges as Edge[])
+      applyTransition(before, { nodes: document.nodes as BlockNode[], edges: document.edges as Edge[] })
       setDesignName(document.name || 'untitled')
       setSelectedNodeId(null)
       setStatus('Design opened')
@@ -340,10 +362,8 @@ export default function App() {
     try {
       const document = JSON.parse(saved) as DesignDocument
       const before = snapshot()
-      const nextNodes = document.nodes as BlockNode[]
-      const nextEdges = document.edges as Edge[]
-      replaceDocument(nextNodes, nextEdges)
-      applyTransition(before, { nodes: nextNodes, edges: nextEdges })
+      replaceDocument(document.nodes as BlockNode[], document.edges as Edge[])
+      applyTransition(before, { nodes: document.nodes as BlockNode[], edges: document.edges as Edge[] })
       setDesignName(document.name || 'untitled')
       setStatus('Last saved design restored')
     } catch { setStatus('Saved design could not be restored') }
@@ -372,8 +392,10 @@ export default function App() {
         <aside className="palette panel">
           <div className="panel-title">External Ports</div>
           <button className="library-item" onClick={addExternalInput}>
-            <span className="library-icon">I</span>
-            <span><strong>External Input</strong><small>Source port</small></span>
+            <span className="library-icon">I</span><span><strong>External Input</strong><small>Source port</small></span>
+          </button>
+          <button className="library-item" onClick={addExternalOutput}>
+            <span className="library-icon">O</span><span><strong>External Output</strong><small>Target port</small></span>
           </button>
           <div className="panel-title block-library-title">Block Library</div>
           {blockTemplates.map((template, index) => (
@@ -412,7 +434,7 @@ export default function App() {
                 }} />
               </label>
               <label>Type<input value={selectedNode.data.kind} readOnly /></label>
-              {selectedNode.type === 'externalInput' && (
+              {(selectedNode.type === 'externalInput' || selectedNode.type === 'externalOutput') && (
                 <label>Width (bits)
                   <input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateSelectedWidth(Number(event.target.value))} />
                 </label>
@@ -422,9 +444,9 @@ export default function App() {
                   <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? `${port.direction} · ${port.width}-bit`}</small></div>
                 ))}
               </div>
-              <button className="danger" onClick={deleteSelected}>Delete {selectedNode.type === 'externalInput' ? 'external input' : 'block'}</button>
+              <button className="danger" onClick={deleteSelected}>Delete {selectedNode.type?.startsWith('external') ? selectedNode.data.kind.toLowerCase() : 'block'}</button>
             </div>
-          ) : <p className="empty-state">Select a block or external input to edit its properties.</p>}
+          ) : <p className="empty-state">Select a block or external port to edit its properties.</p>}
         </aside>
       </div>
 
