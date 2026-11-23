@@ -16,6 +16,17 @@ export interface InterfaceDefinition {
   label: string
 }
 
+export interface AddressMapEntry {
+  portId: string
+  baseAddress: string | null
+  size: string | null
+}
+
+export interface AddressMap {
+  addressWidth: 32 | 64
+  entries: AddressMapEntry[]
+}
+
 export interface BlockTemplate {
   kind: string
   label: string
@@ -27,6 +38,7 @@ export interface BlockData extends Record<string, unknown> {
   kind: string
   ports: BlockPort[]
   parameters: Record<string, string | number | boolean>
+  addressMap?: AddressMap
 }
 
 export interface DesignDocument {
