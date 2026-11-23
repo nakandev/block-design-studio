@@ -1,5 +1,5 @@
 export type PortDirection = 'input' | 'output'
-export type InterfacePortType = 'axi.master' | 'axi.slave'
+export type InterfacePortType = 'axi.master' | 'axi.slave' | 'i2c.master' | 'i2c.slave'
 export type SignalPortType = 'clock' | 'reset'
 export type BlockPortType = InterfacePortType | SignalPortType
 
