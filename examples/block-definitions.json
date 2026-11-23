@@ -11,7 +11,8 @@
     "kind": "CPU",
     "label": "CPU",
     "ports": [
-      { "id": "clk", "name": "clk", "direction": "input", "width": 1 },
+      { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+      { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
       { "id": "imem", "name": "imem", "direction": "output", "type": "axi.master" },
       { "id": "dmem", "name": "dmem", "direction": "output", "type": "axi.master" }
     ]
