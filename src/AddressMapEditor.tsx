@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { AddressMap, AddressMapEntry, BlockData, BlockPort } from './types'
+import { createPortal } from 'react-dom'
+import type { AddressMap, AddressMapEntry, BlockPort } from './types'
 
 interface AddressMapEditorProps {
   open: boolean
@@ -35,6 +36,15 @@ export default function AddressMapEditor({ open, nodeLabel, slavePorts, value, o
     }))
   }, [open, slavePorts, value])
 
+  useEffect(() => {
+    if (!open) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [open, onCancel])
+
   if (!open) return null
 
   const maxAddress = (1n << BigInt(addressWidth)) - 1n
@@ -54,8 +64,8 @@ export default function AddressMapEditor({ open, nodeLabel, slavePorts, value, o
     if (ranges[i].end === null) continue
     for (let j = i + 1; j < ranges.length; j++) {
       if (ranges[j].end === null) continue
-      const a = parseHex(ranges[i].baseAddress)! 
-      const b = parseHex(ranges[j].baseAddress)! 
+      const a = parseHex(ranges[i].baseAddress)!
+      const b = parseHex(ranges[j].baseAddress)!
       const ae = ranges[i].end!
       const be = ranges[j].end!
       if (a <= be && b <= ae) {
@@ -79,29 +89,36 @@ export default function AddressMapEditor({ open, nodeLabel, slavePorts, value, o
     })) })
   }
 
-  return <div className="address-map-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel() }}>
-    <div className="address-map-modal" role="dialog" aria-modal="true" aria-label="Address Map Editor">
-      <div className="address-map-header">
-        <h2>Address Map — {nodeLabel}</h2>
-        <div className="address-map-toolbar">
-          <label htmlFor="address-width">Address width</label>
-          <select id="address-width" value={addressWidth} onChange={(event) => setAddressWidth(Number(event.target.value) as 32 | 64)}>
-            <option value={32}>32-bit</option>
-            <option value={64}>64-bit</option>
-          </select>
+  return createPortal(
+    <div className="address-map-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onCancel()
+    }}>
+      <div className="address-map-modal" role="dialog" aria-modal="true" aria-label="Address Map Editor">
+        <div className="address-map-header">
+          <h2>Address Map — {nodeLabel}</h2>
+          <div className="address-map-toolbar">
+            <label htmlFor="address-width">Address width</label>
+            <select id="address-width" value={addressWidth} onChange={(event) => setAddressWidth(Number(event.target.value) as 32 | 64)}>
+              <option value={32}>32-bit</option>
+              <option value={64}>64-bit</option>
+            </select>
+          </div>
         </div>
+        <div className="address-map-table-wrap">
+          <table className="address-map-table">
+            <thead><tr><th>Slave Port</th><th>Base Address</th><th>Size</th><th>End Address</th><th>Status</th></tr></thead>
+            <tbody>{ranges.map((range, index) => <tr key={range.portId}>
+              <td><strong>{range.portId}</strong></td>
+              <td><input aria-label={`${range.portId} base address`} value={entries[index].baseAddress} placeholder="0x40000000" onChange={(event) => update(index, 'baseAddress', event.target.value)} /></td>
+              <td><input aria-label={`${range.portId} size`} value={entries[index].size} placeholder="0x10000" onChange={(event) => update(index, 'size', event.target.value)} /></td>
+              <td className="end-address">{range.end === null ? '—' : formatHex(range.end)}</td>
+              <td><span className={`address-map-status ${range.status === 'Valid' ? '' : range.status === 'Unassigned' ? 'unassigned' : 'error'}`}>{range.status}</span></td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        <div className="address-map-footer"><button onClick={onCancel}>Cancel</button><button className="primary" disabled={!canApply} onClick={apply}>Apply</button></div>
       </div>
-      <table className="address-map-table">
-        <thead><tr><th>Slave Port</th><th>Base Address</th><th>Size</th><th>End Address</th><th>Status</th></tr></thead>
-        <tbody>{ranges.map((range, index) => <tr key={range.portId}>
-          <td><strong>{range.portId}</strong></td>
-          <td><input aria-label={`${range.portId} base address`} value={entries[index].baseAddress} placeholder="0x40000000" onChange={(event) => update(index, 'baseAddress', event.target.value)} /></td>
-          <td><input aria-label={`${range.portId} size`} value={entries[index].size} placeholder="0x10000" onChange={(event) => update(index, 'size', event.target.value)} /></td>
-          <td className="end-address">{range.end === null ? '—' : formatHex(range.end)}</td>
-          <td><span className={`address-map-status ${range.status === 'Valid' ? '' : range.status === 'Unassigned' ? 'unassigned' : 'error'}`}>{range.status}</span></td>
-        </tr>)}</tbody>
-      </table>
-      <div className="address-map-footer"><button onClick={onCancel}>Cancel</button><button className="primary" disabled={!canApply} onClick={apply}>Apply</button></div>
-    </div>
-  </div>
+    </div>,
+    document.body,
+  )
 }
