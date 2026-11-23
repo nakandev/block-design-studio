@@ -3,22 +3,11 @@ import type { Edge } from '@xyflow/react'
 
 type Point = { x: number; y: number }
 type Obstacle = { left: number; right: number; top: number; bottom: number }
+type Segment = { a: Point; b: Point }
 
 const STUB = 24
 const CLEARANCE = 12
 const LANE_GAP = 24
-
-function intersectsSegment(a: Point, b: Point, obstacle: Obstacle): boolean {
-  if (a.y === b.y) {
-    return a.y > obstacle.top && a.y < obstacle.bottom
-      && Math.max(Math.min(a.x, b.x), obstacle.left) < Math.min(Math.max(a.x, b.x), obstacle.right)
-  }
-  if (a.x === b.x) {
-    return a.x > obstacle.left && a.x < obstacle.right
-      && Math.max(Math.min(a.y, b.y), obstacle.top) < Math.min(Math.max(a.y, b.y), obstacle.bottom)
-  }
-  return true
-}
 
 function simplify(points: Point[]): Point[] {
   const result: Point[] = []
@@ -35,60 +24,110 @@ function simplify(points: Point[]): Point[] {
   return result
 }
 
+function pointInObstacle(point: Point, obstacle: Obstacle): boolean {
+  return point.x >= obstacle.left && point.x <= obstacle.right
+    && point.y >= obstacle.top && point.y <= obstacle.bottom
+}
+
+function intersectsObstacle(a: Point, b: Point, obstacle: Obstacle): boolean {
+  if (pointInObstacle(a, obstacle) || pointInObstacle(b, obstacle)) return true
+  if (a.y === b.y) {
+    const left = Math.min(a.x, b.x)
+    const right = Math.max(a.x, b.x)
+    if (right < obstacle.left || left > obstacle.right) return false
+    return obstacle.top < a.y && a.y < obstacle.bottom
+  }
+  if (a.x === b.x) {
+    const top = Math.min(a.y, b.y)
+    const bottom = Math.max(a.y, b.y)
+    if (bottom < obstacle.top || top > obstacle.bottom) return false
+    return obstacle.left < a.x && a.x < obstacle.right
+  }
+  return false
+}
+
+function toSegments(points: Point[]): Segment[] {
+  return points.slice(1).map((point, index) => ({ a: points[index], b: point }))
+}
+
+function overlapsVertical(a: Segment, b: Segment): boolean {
+  if (a.a.x !== a.b.x || b.a.x !== b.b.x || a.a.x !== b.a.x) return false
+  const aTop = Math.min(a.a.y, a.b.y)
+  const aBottom = Math.max(a.a.y, a.b.y)
+  const bTop = Math.min(b.a.y, b.b.y)
+  const bBottom = Math.max(b.a.y, b.b.y)
+  return Math.min(aBottom, bBottom) - Math.max(aTop, bTop) > 1
+}
+
 function routeEdge(
   source: Point,
   target: Point,
   obstacles: Obstacle[],
+  reservedSegments: Segment[],
   lane: number,
 ): Point[] {
   const start = { x: source.x + STUB, y: source.y }
   const end = { x: target.x - STUB, y: target.y }
-  const minX = Math.min(start.x, end.x, ...obstacles.map((item) => item.left)) - CLEARANCE * 2
-  const maxX = Math.max(start.x, end.x, ...obstacles.map((item) => item.right)) + CLEARANCE * 2
-  const minY = Math.min(source.y, target.y, ...obstacles.map((item) => item.top)) - CLEARANCE * 2
-  const maxY = Math.max(source.y, target.y, ...obstacles.map((item) => item.bottom)) + CLEARANCE * 2
+  const minX = Math.min(start.x, end.x, ...obstacles.map((item) => item.left)) - CLEARANCE * 3
+  const maxX = Math.max(start.x, end.x, ...obstacles.map((item) => item.right)) + CLEARANCE * 3
+  const minY = Math.min(source.y, target.y, ...obstacles.map((item) => item.top)) - CLEARANCE * 3
+  const maxY = Math.max(source.y, target.y, ...obstacles.map((item) => item.bottom)) + CLEARANCE * 3
 
-  const xCandidates = new Set<number>([start.x, end.x, (start.x + end.x) / 2])
-  const yCandidates = new Set<number>([source.y, target.y])
-  for (let x = minX; x <= maxX; x += LANE_GAP) xCandidates.add(x)
-  for (let y = minY; y <= maxY; y += LANE_GAP) yCandidates.add(y)
+  const xs = new Set<number>([start.x, end.x, (start.x + end.x) / 2])
+  const ys = new Set<number>([source.y, target.y, (source.y + target.y) / 2])
+  for (let x = minX; x <= maxX; x += LANE_GAP) xs.add(x)
+  for (let y = minY; y <= maxY; y += LANE_GAP) ys.add(y)
+
   for (const obstacle of obstacles) {
-    xCandidates.add(obstacle.left - CLEARANCE)
-    xCandidates.add(obstacle.right + CLEARANCE)
-    yCandidates.add(obstacle.top - CLEARANCE)
-    yCandidates.add(obstacle.bottom + CLEARANCE)
+    xs.add(obstacle.left - CLEARANCE)
+    xs.add(obstacle.right + CLEARANCE)
+    ys.add(obstacle.top - CLEARANCE)
+    ys.add(obstacle.bottom + CLEARANCE)
   }
 
-  const xs = [...xCandidates]
-  const laneCenter = (source.y + target.y) / 2 + lane * LANE_GAP
-  const ys = [...yCandidates].sort((a, b) => Math.abs(a - laneCenter) - Math.abs(b - laneCenter))
+  const verticalXs = [...xs].sort((a, b) => {
+    if (lane < 0) return a - b
+    if (lane > 0) return b - a
+    return Math.abs(a - (start.x + end.x) / 2) - Math.abs(b - (start.x + end.x) / 2)
+  })
+  const horizontalYs = [...ys].sort((a, b) => {
+    const preferredA = (source.y + target.y) / 2 + lane * LANE_GAP
+    return Math.abs(a - preferredA) - Math.abs(b - preferredA)
+  })
+
   let best: Point[] | undefined
   let bestScore = Number.POSITIVE_INFINITY
 
-  for (const y of ys) {
-    for (const x1 of xs) {
-      for (const x2 of xs) {
-        const candidate = simplify([
-          source,
-          start,
-          { x: x1, y: start.y },
-          { x: x1, y },
-          { x: x2, y },
-          { x: x2, y: end.y },
-          end,
-          target,
-        ])
-        if (candidate.slice(1, -1).some((point, index) =>
-          obstacles.some((obstacle) => intersectsSegment(point, candidate[index + 2], obstacle)),
-        )) continue
+  // Prefer a three-segment orthogonal route first. These routes keep all
+  // verticals at distinct x coordinates and are usually visually cleaner.
+  for (const middleX of verticalXs) {
+    for (const middleY of horizontalYs) {
+      const candidates = [
+        simplify([source, start, { x: middleX, y: start.y }, { x: middleX, y: target.y }, end, target]),
+        simplify([source, start, { x: start.x, y: middleY }, { x: middleX, y: middleY }, { x: middleX, y: end.y }, end, target]),
+        simplify([source, start, { x: middleX, y: start.y }, { x: middleX, y: middleY }, { x: end.x, y: middleY }, end, target]),
+        simplify([source, start, { x: start.x, y: middleY }, { x: end.x, y: middleY }, end, target]),
+      ]
 
-        let length = 0
-        for (let index = 1; index < candidate.length; index += 1) {
-          length += Math.abs(candidate[index].x - candidate[index - 1].x)
-            + Math.abs(candidate[index].y - candidate[index - 1].y)
-        }
-        const bends = Math.max(0, candidate.length - 2)
-        const score = length + bends * 18 + Math.abs(y - laneCenter) * 0.35
+      for (const candidate of candidates) {
+        const segments = toSegments(candidate)
+        if (segments.some((segment) => obstacles.some((obstacle) => intersectsObstacle(segment.a, segment.b, obstacle)))) continue
+
+        const newVerticalSegments = segments.filter((segment) => segment.a.x === segment.b.x)
+        const overlaps = newVerticalSegments.reduce((count, segment) =>
+          count + reservedSegments.filter((reserved) => overlapsVertical(segment, reserved)).length,
+        0)
+        const uniqueVerticalXs = new Set(newVerticalSegments.map((segment) => segment.a.x)).size
+        const length = segments.reduce((total, segment) =>
+          total + Math.abs(segment.b.x - segment.a.x) + Math.abs(segment.b.y - segment.a.y), 0)
+        const bends = candidate.length - 2
+        const yBalance = newVerticalSegments.reduce((total, segment) => {
+          const mid = (segment.a.y + segment.b.y) / 2
+          return total + Math.abs(mid - (source.y + target.y) / 2)
+        }, 0)
+        const score = length + bends * 30 + overlaps * 500 + yBalance * 0.08
+          + Math.abs(middleX - (start.x + end.x) / 2) * 0.04
+
         if (score < bestScore) {
           best = candidate
           bestScore = score
@@ -97,11 +136,9 @@ function routeEdge(
     }
   }
 
-  // If a crowded layout has no clear candidate, use a broad outside lane rather
-  // than drawing a diagonal or silently reverting to a node-crossing bezier.
   if (!best) {
-    const y = minY - LANE_GAP * (Math.abs(lane) + 1)
-    best = [source, start, { x: start.x, y }, { x: end.x, y }, end, target]
+    const outsideLane = minY - LANE_GAP * (Math.abs(lane) + 1)
+    best = [source, start, { x: start.x, y: outsideLane }, { x: end.x, y: outsideLane }, end, target]
   }
   return best
 }
@@ -115,6 +152,8 @@ export default function OrthogonalEdge(props: EdgeProps) {
   const edges = useEdges() as Edge[]
   const sourceNode = nodes.find((node) => node.id === props.source)
   const targetNode = nodes.find((node) => node.id === props.target)
+  if (!sourceNode || !targetNode) return null
+
   const obstacles = nodes
     .filter((node) => node.id !== props.source && node.id !== props.target)
     .map((node) => {
@@ -131,16 +170,31 @@ export default function OrthogonalEdge(props: EdgeProps) {
   const orderedEdges = [...edges].sort((a, b) => a.id.localeCompare(b.id))
   const edgeIndex = orderedEdges.findIndex((edge) => edge.id === props.id)
   const lane = edgeIndex === 0 ? 0 : (edgeIndex % 2 ? 1 : -1) * Math.ceil(edgeIndex / 2)
+
+  const reservedSegments: Segment[] = []
+  // Reserve already-routed vertical segments by endpoint distance. When all
+  // visible routing calculations are based on the same grid, this prevents
+  // independent edges from choosing the exact same vertical x coordinate.
+  for (const edge of orderedEdges) {
+    if (edge.id === props.id) break
+    const source = nodes.find((node) => node.id === edge.source)
+    const target = nodes.find((node) => node.id === edge.target)
+    if (!source || !target) continue
+    const sourceX = edge.sourceHandle ? props.sourceX : source.position.x
+    const targetX = edge.targetHandle ? props.targetX : target.position.x
+    const sourceY = source.position.y
+    const targetY = target.position.y
+    reservedSegments.push({ a: { x: sourceX, y: sourceY }, b: { x: sourceX, y: targetY } })
+    reservedSegments.push({ a: { x: targetX, y: sourceY }, b: { x: targetX, y: targetY } })
+  }
+
   const path = routeEdge(
     { x: props.sourceX, y: props.sourceY },
     { x: props.targetX, y: props.targetY },
     obstacles,
+    reservedSegments,
     lane,
   )
-
-  // Keep the references explicit so node deletion during an edit doesn't leave
-  // an edge render attempting to route from stale endpoints.
-  if (!sourceNode || !targetNode) return null
 
   return <BaseEdge
     id={props.id}

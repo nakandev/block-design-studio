@@ -1,0 +1,1 @@
+[{"type":"feature","name":"orthogonal-edge-routing","status":"implemented","improvements":["vertical segments use lane-aware candidate sorting","routes penalize overlap with previously routed vertical segments","multiple candidate shapes are compared","horizontal detours are separated by lane gap"]}]
