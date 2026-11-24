@@ -16,6 +16,7 @@ button { cursor: pointer; }
 .design-name:hover, .design-name:focus { border-color: #d1d9e5; background: #fff; }
 .top-actions { display: flex; justify-content: flex-end; gap: 6px; min-width: 0; }
 .top-actions button { height: 34px; border: 1px solid #d6dde8; border-radius: 6px; background: #fff; color: #334155; padding: 0 12px; white-space: nowrap; }
+.top-actions select { height: 34px; border: 1px solid #d6dde8; border-radius: 6px; background: #fff; color: #334155; padding: 0 8px; }
 .top-actions button:hover { background: #f8fafc; }
 .top-actions .primary { border-color: #2563eb; background: #2563eb; color: #fff; }
 .top-actions button:disabled { cursor: not-allowed; opacity: .38; background: #f8fafc; }
@@ -113,3 +114,97 @@ button { cursor: pointer; }
 .address-map-footer button { padding: 0 14px; }
 .address-map-footer .primary { border-color: #2563eb; background: #2563eb; color: #fff; }
 .address-map-footer button:disabled { cursor: not-allowed; opacity: .45; }
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  color: #e5e7eb;
+  background: #0b1120;
+}
+:root[data-theme='dark'] .app-shell { background: #0b1120; }
+:root[data-theme='dark'] .topbar,
+:root[data-theme='dark'] .panel { background: #111827; }
+:root[data-theme='dark'] .topbar,
+:root[data-theme='dark'] .sidebar,
+:root[data-theme='dark'] .wire-filter,
+:root[data-theme='dark'] .properties,
+:root[data-theme='dark'] .statusbar { border-color: #273449; }
+:root[data-theme='dark'] .design-name { color: #e5e7eb; }
+:root[data-theme='dark'] .design-name:hover,
+:root[data-theme='dark'] .design-name:focus { border-color: #475569; background: #1f2937; }
+:root[data-theme='dark'] .top-actions button,
+:root[data-theme='dark'] .top-actions select,
+:root[data-theme='dark'] .wire-filter-actions button,
+:root[data-theme='dark'] .address-map-group-actions button,
+:root[data-theme='dark'] .address-map-toolbar select,
+:root[data-theme='dark'] .address-map-footer button {
+  border-color: #475569;
+  background: #1f2937;
+  color: #e5e7eb;
+}
+:root[data-theme='dark'] .top-actions button:hover,
+:root[data-theme='dark'] .wire-filter-actions button:hover,
+:root[data-theme='dark'] .address-map-group-actions button:hover,
+:root[data-theme='dark'] .address-map-footer button:hover { background: #334155; }
+:root[data-theme='dark'] .top-actions .primary,
+:root[data-theme='dark'] .address-map-footer .primary { border-color: #2563eb; background: #2563eb; color: #fff; }
+:root[data-theme='dark'] .top-actions button:disabled { background: #1f2937; }
+:root[data-theme='dark'] .wire-filter-item,
+:root[data-theme='dark'] .library-item,
+:root[data-theme='dark'] .address-map-group-heading { color: #d1d5db; }
+:root[data-theme='dark'] .panel-title,
+:root[data-theme='dark'] .wire-filter-item small,
+:root[data-theme='dark'] .property-form label,
+:root[data-theme='dark'] .address-map-summary,
+:root[data-theme='dark'] .address-map-toolbar label,
+:root[data-theme='dark'] .address-map-notice { color: #9ca3af; }
+:root[data-theme='dark'] .library-item:hover { border-color: #475569; background: #1f2937; }
+:root[data-theme='dark'] .library-icon { border-color: #334155; background: #1e293b; }
+:root[data-theme='dark'] .canvas-panel { background: #0f172a; }
+:root[data-theme='dark'] .block-node,
+:root[data-theme='dark'] .external-axi-node,
+:root[data-theme='dark'] .external-input-node,
+:root[data-theme='dark'] .external-output-node,
+:root[data-theme='dark'] .external-signal-node { background: #1f2937; color: #e5e7eb; }
+:root[data-theme='dark'] .block-node-header { border-bottom-color: #334155; background: #273449; }
+:root[data-theme='dark'] .external-axi-header { border-bottom-color: #3b2b56; background: #302342; }
+:root[data-theme='dark'] .external-input-header { border-bottom-color: #263d5a; background: #20334b; }
+:root[data-theme='dark'] .external-output-header { border-bottom-color: #55402a; background: #3d3023; }
+:root[data-theme='dark'] .clock-node.external-signal-node { background: #1d3025; }
+:root[data-theme='dark'] .reset-node.external-signal-node { background: #3a2427; }
+:root[data-theme='dark'] .clock-node .external-signal-header { border-bottom-color: #294834; background: #243b2c; }
+:root[data-theme='dark'] .reset-node .external-signal-header { border-bottom-color: #563237; background: #432a2e; }
+:root[data-theme='dark'] .block-kind,
+:root[data-theme='dark'] .external-axi-header span,
+:root[data-theme='dark'] .external-input-header span,
+:root[data-theme='dark'] .external-output-header span,
+:root[data-theme='dark'] .external-signal-header span { color: #9ca3af; }
+:root[data-theme='dark'] .port-row small { color: #9ca3af; }
+:root[data-theme='dark'] .property-form input,
+:root[data-theme='dark'] .address-map-table input {
+  border-color: #475569;
+  background: #0f172a;
+  color: #e5e7eb;
+}
+:root[data-theme='dark'] .property-form input:focus,
+:root[data-theme='dark'] .address-map-table input:focus { border-color: #3b82f6; outline-color: #3b82f6; }
+:root[data-theme='dark'] .port-property,
+:root[data-theme='dark'] .address-map-table th,
+:root[data-theme='dark'] .address-map-table td { border-color: #273449; }
+:root[data-theme='dark'] .address-map-group { border-color: #334155; }
+:root[data-theme='dark'] .address-map-group-heading,
+:root[data-theme='dark'] .address-map-table th { background: #1f2937; }
+:root[data-theme='dark'] .address-map-table .end-address { color: #cbd5e1; }
+:root[data-theme='dark'] .statusbar { background: #111827; color: #9ca3af; }
+:root[data-theme='dark'] .danger { border-color: #7f1d1d; background: #2a171b; color: #f87171; }
+:root[data-theme='dark'] .address-map-backdrop { background: rgba(0, 0, 0, .66); }
+:root[data-theme='dark'] .address-map-modal { background: #111827; color: #e5e7eb; }
+:root[data-theme='dark'] .address-map-header,
+:root[data-theme='dark'] .address-map-footer { border-color: #273449; }
+:root[data-theme='dark'] .react-flow__controls button {
+  border-color: #475569;
+  background: #1f2937;
+  color: #e5e7eb;
+  fill: #e5e7eb;
+}
+:root[data-theme='dark'] .react-flow__controls button:hover { background: #334155; }
+:root[data-theme='dark'] .react-flow__minimap { border-color: #334155; }
