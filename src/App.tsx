@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addEdge, applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, Controls,
   MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState,
@@ -12,7 +12,7 @@ import ExternalAxiNodeView from './ExternalAxiNode'
 import ExternalSignalNodeView from './ExternalSignalNode'
 import AddressMapEditor from './AddressMapEditor'
 import OrthogonalEdge from './OrthogonalEdge'
-import type { AddressMap, BlockPort, BlockTemplate, DesignDocument, InterfacePortType, InterfaceDefinition, SignalPortType } from './types'
+import type { AddressMap, BlockPort, BlockTemplate, DesignDocument, InterfacePortType, InterfaceDefinition } from './types'
 
 const STORAGE_KEY = 'block-design-studio-document-v1'
 const defaultInterfaces: InterfaceDefinition[] = [{ name: 'axi', label: 'AXI' }, { name: 'i2c', label: 'I2C' }]
@@ -117,28 +117,9 @@ export default function App() {
     futureRef.current = []
     renderHistory((v) => v + 1)
   }, [])
-  const replace = useCallback((nextNodes: BlockNode[], nextEdges: Edge[]) => {
-    nodesRef.current = nextNodes
-    edgesRef.current = nextEdges
-    setNodes(nextNodes)
-    setEdges(nextEdges)
-  }, [setEdges, setNodes])
-  const undo = useCallback(() => {
-    const previous = pastRef.current.pop()
-    if (!previous) return
-    futureRef.current.push(snapshot())
-    replace(previous.nodes, previous.edges)
-    setSelectedId(null)
-    setStatus('Undo')
-  }, [replace, snapshot])
-  const redo = useCallback(() => {
-    const next = futureRef.current.pop()
-    if (!next) return
-    pastRef.current.push(snapshot())
-    replace(next.nodes, next.edges)
-    setSelectedId(null)
-    setStatus('Redo')
-  }, [replace, snapshot])
+  const replace = useCallback((nextNodes: BlockNode[], nextEdges: Edge[]) => { nodesRef.current = nextNodes; edgesRef.current = nextEdges; setNodes(nextNodes); setEdges(nextEdges) }, [setEdges, setNodes])
+  const undo = useCallback(() => { const previous = pastRef.current.pop(); if (!previous) return; futureRef.current.push(snapshot()); replace(previous.nodes, previous.edges); setSelectedId(null); setStatus('Undo') }, [replace, snapshot])
+  const redo = useCallback(() => { const next = futureRef.current.pop(); if (!next) return; pastRef.current.push(snapshot()); replace(next.nodes, next.edges); setSelectedId(null); setStatus('Redo') }, [replace, snapshot])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -154,38 +135,69 @@ export default function App() {
   const isAxiInterconnect = selectedNode?.data.kind === 'AXI Interconnect'
   const masterPorts = selectedNode?.data.ports.filter((port) => port.type === 'axi.master') ?? []
 
-  const getPorts = useCallback((connection: Edge | Connection) => {
+  const getNodesById = useCallback((connection: Edge | Connection) => {
     const sourceNode = nodesRef.current.find((node) => node.id === connection.source)
     const targetNode = nodesRef.current.find((node) => node.id === connection.target)
+    return { sourceNode, targetNode }
+  }, [])
+  const getPorts = useCallback((connection: Edge | Connection) => {
+    const { sourceNode, targetNode } = getNodesById(connection)
     return {
       source: sourceNode?.data.ports.find((port) => port.id === connection.sourceHandle),
       target: targetNode?.data.ports.find((port) => port.id === connection.targetHandle),
     }
-  }, [])
-  const connectionError = useCallback((source?: BlockPort, target?: BlockPort) => {
+  }, [getNodesById])
+
+  const connectionError = useCallback((source?: BlockPort, target?: BlockPort, sourceNode?: BlockNode, targetNode?: BlockNode) => {
     if (!source || !target) return 'Connect valid ports'
     if (source.direction !== 'output' || target.direction !== 'input') return 'Connect an output port to an input port'
-    const sourceInterface = source.type?.match(/^(.+)\.master$/)?.[1]
-    const targetInterface = target.type?.match(/^(.+)\.slave$/)?.[1]
-    if (sourceInterface || targetInterface) return sourceInterface && sourceInterface === targetInterface ? null : 'Connect a matching interface master to slave'
-    if (source.type === 'clock' || source.type === 'reset' || target.type === 'clock' || target.type === 'reset') return source.type === target.type ? null : `Type mismatch: ${source.type ?? 'signal'} cannot connect to ${target.type ?? 'signal'}`
+
+    const sourceIsExternal = !!sourceNode?.type?.startsWith('external')
+    const targetIsExternal = !!targetNode?.type?.startsWith('external')
+
+    // If either endpoint is an external port, the external and internal ports must have exactly the same type.
+    if (sourceIsExternal || targetIsExternal) {
+      if (!source.type && !target.type) {
+        return 'External and internal ports require the same type'
+      }
+      if (source.type !== target.type) {
+        return 'Port type mismatch: external and internal ports must have the same type'
+      }
+    } else {
+      const sourceInterface = source.type?.match(/^(.+)\.master$/)?.[1]
+      const targetInterface = target.type?.match(/^(.+)\.slave$/)?.[1]
+      if (sourceInterface || targetInterface) {
+        return sourceInterface && sourceInterface === targetInterface ? null : 'Connect a matching interface master to slave'
+      }
+      if (source.type === 'clock' || source.type === 'reset' || target.type === 'clock' || target.type === 'reset') {
+        return source.type === target.type ? null : `Type mismatch: ${source.type ?? 'signal'} cannot connect to ${target.type ?? 'signal'}`
+      }
+    }
+
+    if (source.type || target.type) {
+      return source.type === target.type ? null : 'Port type mismatch'
+    }
     return source.width === target.width ? null : `Port width mismatch: ${source.width}-bit output cannot connect to ${target.width}-bit input`
   }, [])
+
   const isValidConnection = useCallback((connection: Edge | Connection) => {
     if (!connection.source || !connection.target || connection.source === connection.target) return false
+    const { sourceNode, targetNode } = getNodesById(connection)
     const { source, target } = getPorts(connection)
-    return connectionError(source, target) === null
-  }, [connectionError, getPorts])
+    return connectionError(source, target, sourceNode, targetNode) === null
+  }, [connectionError, getNodesById, getPorts])
+
   const onConnect = useCallback((connection: Connection) => {
+    const { sourceNode, targetNode } = getNodesById(connection)
     const { source, target } = getPorts(connection)
-    const error = connectionError(source, target)
+    const error = connectionError(source, target, sourceNode, targetNode)
     if (error) { setStatus(error); return }
     if (edgesRef.current.some((edge) => edge.target === connection.target && edge.targetHandle === connection.targetHandle)) { setStatus('This input port is already connected'); return }
     const before = snapshot()
     replace(nodesRef.current, addEdge({ ...connection, type: 'orthogonal', markerEnd: { type: MarkerType.ArrowClosed } }, edgesRef.current))
     record(before)
     setStatus('Connection created')
-  }, [connectionError, getPorts, record, replace, snapshot])
+  }, [connectionError, getNodesById, getPorts, record, replace, snapshot])
 
   const addBlock = (template: BlockTemplate) => {
     const before = snapshot()
@@ -193,13 +205,11 @@ export default function App() {
     const addressMap: AddressMap | undefined = template.kind === 'AXI Interconnect'
       ? { addressWidth: 32, entries: template.ports.filter((port) => port.type === 'axi.master').map((port) => ({ portId: port.id, baseAddress: null, size: null })) }
       : undefined
-    const newNode: BlockNode = {
-      id, type: 'block', position: { x: 260 + nodesRef.current.length * 24, y: 120 + nodesRef.current.length * 24 },
-      data: { label: template.label, kind: template.kind, ports: template.ports.map((port) => ({ ...port })), parameters: {}, ...(addressMap ? { addressMap } : {}) },
-    }
+    const newNode: BlockNode = { id, type: 'block', position: { x: 260 + nodesRef.current.length * 24, y: 120 + nodesRef.current.length * 24 }, data: { label: template.label, kind: template.kind, ports: template.ports.map((port) => ({ ...port })), parameters: {}, ...(addressMap ? { addressMap } : {}) } }
     replace([...nodesRef.current, newNode], edgesRef.current)
     record(before); setSelectedId(id); setStatus(`${template.label} added`)
   }
+
   const addExternal = (kind: 'input' | 'output' | 'clock' | 'reset' | InterfacePortType, definition?: InterfaceDefinition, side?: 'master' | 'slave') => {
     const isInterface = !!definition && !!side
     const isSignal = kind === 'clock' || kind === 'reset'
@@ -245,73 +255,23 @@ export default function App() {
   }
 
   const loadDefinitions = async (file: File) => {
-    try {
-      const parsed = validateDefinitions(JSON.parse(await file.text()))
-      setTemplates(parsed.blocks); setInterfaces(parsed.interfaces)
-      setStatus(`${parsed.blocks.length} blocks and ${parsed.interfaces.length} interfaces loaded`)
-    } catch (error) { setStatus(error instanceof Error ? `Definition error: ${error.message}` : 'Could not load definitions') }
+    try { const parsed = validateDefinitions(JSON.parse(await file.text())); setTemplates(parsed.blocks); setInterfaces(parsed.interfaces); setStatus(`${parsed.blocks.length} blocks and ${parsed.interfaces.length} interfaces loaded`) }
+    catch (error) { setStatus(error instanceof Error ? `Definition error: ${error.message}` : 'Could not load definitions') }
   }
   const openDesign = async (file: File) => {
-    try {
-      const document = JSON.parse(await file.text()) as DesignDocument
-      if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format')
-      replace(document.nodes as BlockNode[], document.edges as Edge[])
-      setDesignName(document.name || 'untitled'); setSelectedId(null); setStatus('Design opened')
-    } catch (error) { setStatus(error instanceof Error ? error.message : 'Could not open design') }
+    try { const document = JSON.parse(await file.text()) as DesignDocument; if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format'); replace(document.nodes as BlockNode[], document.edges as Edge[]); setDesignName(document.name || 'untitled'); setSelectedId(null); setStatus('Design opened') }
+    catch (error) { setStatus(error instanceof Error ? error.message : 'Could not open design') }
   }
   const saveDesign = () => { localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current })); setStatus('Saved in browser storage') }
-  const exportDesign = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current }, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${designName || 'block-design'}.json`; anchor.click(); URL.revokeObjectURL(url)
-  }
+  const exportDesign = () => { const blob = new Blob([JSON.stringify({ version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${designName || 'block-design'}.json`; anchor.click(); URL.revokeObjectURL(url) }
 
   const addressMapNode = nodes.find((node) => node.id === addressMapNodeId)
   return <main className="app-shell">
-    <header className="topbar">
-      <div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div>
-      <input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" />
-      <div className="top-actions">
-        <button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button>
-        <button onClick={() => definitionsFileRef.current?.click()}>Load definitions</button>
-        <input ref={definitionsFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadDefinitions(file); event.target.value = '' }} />
-        <button onClick={saveDesign}>Save</button><button className="primary" onClick={exportDesign}>Export JSON</button>
-        <button onClick={() => designFileRef.current?.click()}>Open</button>
-        <input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} />
-      </div>
-    </header>
+    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFileRef.current?.click()}>Load definitions</button><input ref={definitionsFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadDefinitions(file); event.target.value = '' }} /><button onClick={saveDesign}>Save</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /></div></header>
     <div className="workspace">
-      <aside className="palette panel">
-        <div className="panel-title">External Ports</div>
-        <button className="library-item" onClick={() => addExternal('input')}><span className="library-icon">I</span><strong>External Input</strong></button>
-        <button className="library-item" onClick={() => addExternal('output')}><span className="library-icon">O</span><strong>External Output</strong></button>
-        <button className="library-item" onClick={() => addExternal('clock')}><span className="library-icon">C</span><strong>External Clock</strong></button>
-        <button className="library-item" onClick={() => addExternal('reset')}><span className="library-icon">R</span><strong>External Reset</strong></button>
-        {interfaces.map((definition) => <div key={definition.name} className="interface-library-group">
-          <div className="interface-library-label">{definition.label}</div>
-          <button className="library-item" onClick={() => addExternal('input', definition, 'master')}><span className="library-icon">M</span><strong>{definition.label} Master</strong></button>
-          <button className="library-item" onClick={() => addExternal('input', definition, 'slave')}><span className="library-icon">S</span><strong>{definition.label} Slave</strong></button>
-        </div>)}
-        <div className="panel-title block-library-title">Block Library</div>
-        {templates.map((template) => <button className="library-item" key={template.kind} onClick={() => addBlock(template)}><span className="library-icon">{template.kind.slice(0, 1)}</span><span><strong>{template.label}</strong><small>{template.kind}</small></span></button>)}
-      </aside>
-      <section className="canvas-panel">
-        <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
-          onNodesChange={(changes: NodeChange<BlockNode>[]) => { const before = snapshot(); const next = applyNodeChanges(changes, nodesRef.current) as BlockNode[]; nodesRef.current = next; onNodesChangeBase(changes); if (changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) record(before) }}
-          onEdgesChange={(changes: EdgeChange<Edge>[]) => { const before = snapshot(); const next = applyEdgeChanges(changes, edgesRef.current); edgesRef.current = next; onEdgesChangeBase(changes); if (changes.some((change) => change.type === 'remove')) record(before) }}
-          onConnect={onConnect} isValidConnection={isValidConnection}
-          onSelectionChange={({ nodes: selected }: OnSelectionChangeParams) => setSelectedId(selected.length === 1 ? selected[0].id : null)}
-          fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']}>
-          <Background variant={BackgroundVariant.Dots} gap={16} size={1} /><Controls /><MiniMap pannable zoomable />
-        </ReactFlow>
-      </section>
-      <aside className="properties panel"><div className="panel-title">Properties</div>{selectedNode ? <div className="property-form">
-        <label>Name<input value={selectedNode.data.label} onChange={(event) => updateLabel(event.target.value)} /></label>
-        <label>Type<input value={selectedNode.data.kind} readOnly /></label>
-        {isAxiInterconnect && <><button className="address-map-button" onClick={() => setAddressMapNodeId(selectedNode.id)}>Address Map</button><small className="address-map-summary">{selectedNode.data.addressMap?.entries.filter((entry) => entry.baseAddress && entry.size).length ?? 0} of {masterPorts.length} master ports configured</small></>}
-        {(selectedNode.type === 'externalInput' || selectedNode.type === 'externalOutput') && <label>Width (bits)<input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateWidth(Number(event.target.value))} /></label>}
-        <div className="property-section"><strong>Ports</strong>{selectedNode.data.ports.map((port) => <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? (port.width !== undefined ? `${port.direction} · ${port.width}-bit` : port.direction)}</small></div>)}</div>
-        <button className="danger" onClick={deleteSelected}>Delete node</button>
-      </div> : <p className="empty-state">Select a node to edit its properties.</p>}</aside>
+      <aside className="palette panel"><div className="panel-title">External Ports</div><button className="library-item" onClick={() => addExternal('input')}><span className="library-icon">I</span><strong>External Input</strong></button><button className="library-item" onClick={() => addExternal('output')}><span className="library-icon">O</span><strong>External Output</strong></button><button className="library-item" onClick={() => addExternal('clock')}><span className="library-icon">C</span><strong>External Clock</strong></button><button className="library-item" onClick={() => addExternal('reset')}><span className="library-icon">R</span><strong>External Reset</strong></button>{interfaces.map((definition) => <div key={definition.name} className="interface-library-group"><div className="interface-library-label">{definition.label}</div><button className="library-item" onClick={() => addExternal('input', definition, 'master')}><span className="library-icon">M</span><strong>{definition.label} Master</strong></button><button className="library-item" onClick={() => addExternal('input', definition, 'slave')}><span className="library-icon">S</span><strong>{definition.label} Slave</strong></button></div>)}<div className="panel-title block-library-title">Block Library</div>{templates.map((template) => <button className="library-item" key={template.kind} onClick={() => addBlock(template)}><span className="library-icon">{template.kind.slice(0, 1)}</span><span><strong>{template.label}</strong><small>{template.kind}</small></span></button>)}</aside>
+      <section className="canvas-panel"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={(changes: NodeChange<BlockNode>[]) => { const before = snapshot(); const next = applyNodeChanges(changes, nodesRef.current) as BlockNode[]; nodesRef.current = next; onNodesChangeBase(changes); if (changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) record(before) }} onEdgesChange={(changes: EdgeChange<Edge>[]) => { const before = snapshot(); const next = applyEdgeChanges(changes, edgesRef.current); edgesRef.current = next; onEdgesChangeBase(changes); if (changes.some((change) => change.type === 'remove')) record(before) }} onConnect={onConnect} isValidConnection={isValidConnection} onSelectionChange={({ nodes: selected }: OnSelectionChangeParams) => setSelectedId(selected.length === 1 ? selected[0].id : null)} fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']}><Background variant={BackgroundVariant.Dots} gap={16} size={1} /><Controls /><MiniMap pannable zoomable /></ReactFlow></section>
+      <aside className="properties panel"><div className="panel-title">Properties</div>{selectedNode ? <div className="property-form"><label>Name<input value={selectedNode.data.label} onChange={(event) => updateLabel(event.target.value)} /></label><label>Type<input value={selectedNode.data.kind} readOnly /></label>{isAxiInterconnect && <><button className="address-map-button" onClick={() => setAddressMapNodeId(selectedNode.id)}>Address Map</button><small className="address-map-summary">{selectedNode.data.addressMap?.entries.filter((entry) => entry.baseAddress && entry.size).length ?? 0} of {masterPorts.length} master ports configured</small></>}{(selectedNode.type === 'externalInput' || selectedNode.type === 'externalOutput') && <label>Width (bits)<input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateWidth(Number(event.target.value))} /></label>}<div className="property-section"><strong>Ports</strong>{selectedNode.data.ports.map((port) => <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? (port.width !== undefined ? `${port.direction} · ${port.width}-bit` : port.direction)}</small></div>)}</div><button className="danger" onClick={deleteSelected}>Delete node</button></div> : <p className="empty-state">Select a node to edit its properties.</p>}</aside>
     </div>
     <footer className="statusbar"><span role="status">{status}</span><span>{nodes.length} nodes · {edges.length} connections</span></footer>
     {addressMapNode && <AddressMapEditor open nodeLabel={addressMapNode.data.label} masterPorts={addressMapNode.data.ports.filter((port) => port.type === 'axi.master')} value={addressMapNode.data.addressMap} onCancel={() => setAddressMapNodeId(null)} onApply={applyAddressMap} />}
