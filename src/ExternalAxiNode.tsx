@@ -5,7 +5,7 @@ export type ExternalInterfaceNode = Node<BlockData, 'externalInterfaceMaster' | 
 
 export default function ExternalAxiNodeView({ type, data, selected }: NodeProps<ExternalInterfaceNode>) {
   const port = data.ports[0]
-  const master = type === 'externalInterfaceMaster'
+  const master = port?.type?.endsWith('.master') ?? type === 'externalInterfaceMaster'
   const protocol = port?.type?.replace(/\.(master|slave)$/, '') ?? 'interface'
   const label = protocol.toUpperCase()
 
