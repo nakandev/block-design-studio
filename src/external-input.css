@@ -45,9 +45,9 @@
   padding: 0 9px;
   white-space: nowrap;
 }
-.external-axi-port.master-port,
-.external-input-port { justify-content: flex-end; }
 .external-axi-port.slave-port,
+.external-input-port { justify-content: flex-end; }
+.external-axi-port.master-port,
 .external-output-port { justify-content: flex-start; }
 .external-axi-port small,
 .external-input-port small,

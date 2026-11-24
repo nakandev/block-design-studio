@@ -41,7 +41,7 @@ export default function AddressMapEditor({ open, nodeLabel, masterPorts, value, 
       if (!edge) continue
       const slaveNode = flowNodes.find((node) => node.id === edge.target)
       if (!slaveNode) continue
-      const slavePort = slaveNode.data.ports?.find((candidate: BlockPort) => candidate.id === edge.targetHandle)
+      const slavePort = (slaveNode.data.ports as BlockPort[] | undefined)?.find((candidate) => candidate.id === edge.targetHandle)
       const details = [slaveNode.data.label, slaveNode.data.kind, slavePort?.name].filter(Boolean).join(' · ')
       connections.set(port.id, details || slaveNode.id)
     }

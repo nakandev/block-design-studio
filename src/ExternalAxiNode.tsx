@@ -18,8 +18,8 @@ export default function ExternalAxiNodeView({ type, data, selected }: NodeProps<
       {port && (
         <div className={`external-axi-port ${master ? 'master-port' : 'slave-port'}`}>
           <Handle
-            type={master ? 'source' : 'target'}
-            position={master ? Position.Right : Position.Left}
+            type={master ? 'target' : 'source'}
+            position={master ? Position.Left : Position.Right}
             id={port.id}
             className={`port-handle external-interface-handle ${protocol.toLowerCase()}-handle`}
           />

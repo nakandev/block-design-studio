@@ -155,27 +155,19 @@ export default function App() {
     const sourceIsExternal = !!sourceNode?.type?.startsWith('external')
     const targetIsExternal = !!targetNode?.type?.startsWith('external')
 
-    // If either endpoint is an external port, the external and internal ports must have exactly the same type.
-    if (sourceIsExternal || targetIsExternal) {
-      if (!source.type && !target.type) {
-        return 'External and internal ports require the same type'
-      }
-      if (source.type !== target.type) {
-        return 'Port type mismatch: external and internal ports must have the same type'
-      }
-    } else {
-      const sourceInterface = source.type?.match(/^(.+)\.master$/)?.[1]
-      const targetInterface = target.type?.match(/^(.+)\.slave$/)?.[1]
-      if (sourceInterface || targetInterface) {
-        return sourceInterface && sourceInterface === targetInterface ? null : 'Connect a matching interface master to slave'
-      }
-      if (source.type === 'clock' || source.type === 'reset' || target.type === 'clock' || target.type === 'reset') {
-        return source.type === target.type ? null : `Type mismatch: ${source.type ?? 'signal'} cannot connect to ${target.type ?? 'signal'}`
-      }
+    const sourceInterface = source.type?.match(/^(.+)\.(master|slave)$/)
+    const targetInterface = target.type?.match(/^(.+)\.(master|slave)$/)
+    if (sourceInterface || targetInterface) {
+      if (!sourceInterface || !targetInterface || sourceInterface[1] !== targetInterface[1]) return 'Interface type mismatch'
+      const sourceRole = sourceInterface[2]
+      const targetRole = targetInterface[2]
+      // External ports are seen from outside the design: master is a target, slave is a source.
+      if (sourceIsExternal && targetIsExternal) return sourceRole === 'slave' && targetRole === 'master' ? null : 'Connect an external slave to an external master'
+      if (sourceIsExternal || targetIsExternal) return sourceRole === targetRole ? null : 'Connect an external port to a block port with the same role'
+      return sourceRole === 'master' && targetRole === 'slave' ? null : 'Connect a matching interface master to slave'
     }
-
     if (source.type || target.type) {
-      return source.type === target.type ? null : 'Port type mismatch'
+      return source.type === target.type ? null : `Type mismatch: ${source.type ?? 'signal'} cannot connect to ${target.type ?? 'signal'}`
     }
     return source.width === target.width ? null : `Port width mismatch: ${source.width}-bit output cannot connect to ${target.width}-bit input`
   }, [])
@@ -219,14 +211,14 @@ export default function App() {
     const interfaceType = isInterface ? `${definition.name}.${side}` : kind
     const label = `external_${isInterface ? `${definition.name}_${side}` : kind.replace('.', '_')}`
     const port: BlockPort = isInterface || isAxi || isI2c
-      ? { id: interfaceType.replace('.', '_'), name: label, direction: interfaceType.endsWith('.master') ? 'output' : 'input', type: interfaceType as InterfacePortType }
+      ? { id: interfaceType.replace('.', '_'), name: label, direction: interfaceType.endsWith('.master') ? 'input' : 'output', type: interfaceType as InterfacePortType }
       : isSignal ? { id: kind, name: label, direction: 'output', type: kind }
       : { id: `external_${kind}`, name: label, direction: kind === 'input' ? 'output' : 'input', width: 1 }
     const before = snapshot()
     const count = nodesRef.current.filter((node) => node.type === nodeType).length
     const id = `${nodeType}_${Date.now()}_${count}`
     const display = isInterface ? `${definition.label} ${side}` : isAxi || isI2c ? kind : `External ${kind[0].toUpperCase()}${kind.slice(1)}`
-    const newNode: BlockNode = { id, type: nodeType, position: { x: side === 'slave' ? 560 : 40, y: 140 + count * 64 }, data: { label, kind: `External ${display}`, ports: [port], parameters: {} } }
+    const newNode: BlockNode = { id, type: nodeType, position: { x: interfaceType.endsWith('.master') ? 560 : 40, y: 140 + count * 64 }, data: { label, kind: `External ${display}`, ports: [port], parameters: {} } }
     replace([...nodesRef.current, newNode], edgesRef.current)
     record(before); setSelectedId(id); setStatus(`${newNode.data.kind} added`)
   }
