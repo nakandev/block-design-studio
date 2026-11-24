@@ -22,7 +22,19 @@ button { cursor: pointer; }
 .history-button { width: 34px; padding: 0 !important; font-size: 18px; }
 .workspace { min-height: 0; min-width: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 250px; }
 .panel { min-height: 0; background: #fff; }
-.palette { border-right: 1px solid #dbe2ea; padding: 10px; overflow-y: auto; }
+.sidebar { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #dbe2ea; }
+.wire-filter { flex: 0 1 auto; min-height: 0; max-height: 45%; display: flex; flex-direction: column; border-bottom: 1px solid #dbe2ea; padding: 0 10px; }
+.wire-filter summary { flex: none; cursor: pointer; margin: 0; list-style: none; }
+.wire-filter summary::-webkit-details-marker { display: none; }
+.wire-filter summary::before { content: '▸'; margin-right: 6px; }
+.wire-filter[open] summary::before { content: '▾'; }
+.wire-filter-content { min-height: 0; overflow-y: auto; padding-bottom: 10px; }
+.wire-filter-actions { display: flex; gap: 6px; margin-bottom: 6px; }
+.wire-filter-actions button { padding: 4px 6px; border: 1px solid #d6dde8; border-radius: 5px; background: #fff; color: #334155; font-size: 11px; }
+.wire-filter-item { display: flex; align-items: center; gap: 7px; padding: 4px 0; color: #334155; font-size: 12px; }
+.wire-filter-item span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.wire-filter-item small { color: #64748b; }
+.palette { flex: 1; min-height: 0; padding: 10px; overflow-y: auto; }
 .properties { border-left: 1px solid #dbe2ea; padding: 10px; overflow-y: auto; }
 .panel-title { height: 34px; display: flex; align-items: center; margin-bottom: 8px; color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 .library-item { width: 100%; display: flex; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 7px; background: transparent; padding: 8px; text-align: left; color: #334155; font-size: 12px; }

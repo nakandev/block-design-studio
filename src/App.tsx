@@ -41,6 +41,16 @@ const edgeTypes = { orthogonal: OrthogonalEdge }
 interface Snapshot { nodes: BlockNode[]; edges: Edge[] }
 interface DefinitionSet { interfaces: InterfaceDefinition[]; blocks: BlockTemplate[] }
 
+function edgeTypeKey(edge: Edge, nodesById: Map<string, BlockNode>): string {
+  const source = nodesById.get(edge.source)?.data.ports.find((port) => port.id === edge.sourceHandle)
+  const target = nodesById.get(edge.target)?.data.ports.find((port) => port.id === edge.targetHandle)
+  const port = source ?? target
+  if (!port) return 'unknown'
+  if (!port.type) return 'data'
+  const interfaceName = port.type.match(/^(.+)\.(master|slave)$/)?.[1]
+  return interfaceName ? `interface:${interfaceName}` : port.type
+}
+
 function validateDefinitions(value: unknown): DefinitionSet {
   const document = Array.isArray(value) ? { interfaces: defaultInterfaces, blocks: value } : value
   if (!document || typeof document !== 'object') throw new Error('Definitions must be an object containing interfaces and blocks')
@@ -100,6 +110,7 @@ export default function App() {
   const [addressMapNodeId, setAddressMapNodeId] = useState<string | null>(null)
   const [designName, setDesignName] = useState('untitled')
   const [status, setStatus] = useState('Ready')
+  const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(() => new Set())
   const [, renderHistory] = useState(0)
   const designFileRef = useRef<HTMLInputElement>(null)
   const definitionsFileRef = useRef<HTMLInputElement>(null)
@@ -134,6 +145,27 @@ export default function App() {
   const selectedNode = nodes.find((node) => node.id === selectedId)
   const isAxiInterconnect = selectedNode?.data.kind === 'AXI Interconnect'
   const masterPorts = selectedNode?.data.ports.filter((port) => port.type === 'axi.master') ?? []
+  const edgeTypesById = useMemo(() => {
+    const nodesById = new Map(nodes.map((node) => [node.id, node]))
+    return new Map(edges.map((edge) => [edge.id, edgeTypeKey(edge, nodesById)]))
+  }, [nodes, edges])
+  const edgeTypeCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const key of edgeTypesById.values()) counts.set(key, (counts.get(key) ?? 0) + 1)
+    return [...counts].sort(([a], [b]) => a.localeCompare(b))
+  }, [edgeTypesById])
+  const displayedEdges = useMemo(() => edges.map((edge) => {
+    const hidden = hiddenEdgeTypes.has(edgeTypesById.get(edge.id) ?? 'unknown')
+    return hidden ? { ...edge, hidden: true, selected: false } : edge
+  }), [edges, edgeTypesById, hiddenEdgeTypes])
+
+  const edgeTypeLabel = (key: string) => {
+    if (key.startsWith('interface:')) {
+      const name = key.slice('interface:'.length)
+      return interfaces.find((definition) => definition.name === name)?.label ?? name.toUpperCase()
+    }
+    return key === 'data' ? 'Data' : key === 'clock' ? 'Clock' : key === 'reset' ? 'Reset' : 'Unknown'
+  }
 
   const getNodesById = useCallback((connection: Edge | Connection) => {
     const sourceNode = nodesRef.current.find((node) => node.id === connection.source)
@@ -261,8 +293,31 @@ export default function App() {
   return <main className="app-shell">
     <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFileRef.current?.click()}>Load definitions</button><input ref={definitionsFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadDefinitions(file); event.target.value = '' }} /><button onClick={saveDesign}>Save</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /></div></header>
     <div className="workspace">
-      <aside className="palette panel"><div className="panel-title">External Ports</div><button className="library-item" onClick={() => addExternal('input')}><span className="library-icon">I</span><strong>External Input</strong></button><button className="library-item" onClick={() => addExternal('output')}><span className="library-icon">O</span><strong>External Output</strong></button><button className="library-item" onClick={() => addExternal('clock')}><span className="library-icon">C</span><strong>External Clock</strong></button><button className="library-item" onClick={() => addExternal('reset')}><span className="library-icon">R</span><strong>External Reset</strong></button>{interfaces.map((definition) => <div key={definition.name} className="interface-library-group"><div className="interface-library-label">{definition.label}</div><button className="library-item" onClick={() => addExternal('input', definition, 'master')}><span className="library-icon">M</span><strong>{definition.label} Master</strong></button><button className="library-item" onClick={() => addExternal('input', definition, 'slave')}><span className="library-icon">S</span><strong>{definition.label} Slave</strong></button></div>)}<div className="panel-title block-library-title">Block Library</div>{templates.map((template) => <button className="library-item" key={template.kind} onClick={() => addBlock(template)}><span className="library-icon">{template.kind.slice(0, 1)}</span><span><strong>{template.label}</strong><small>{template.kind}</small></span></button>)}</aside>
-      <section className="canvas-panel"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={(changes: NodeChange<BlockNode>[]) => { const before = snapshot(); const next = applyNodeChanges(changes, nodesRef.current) as BlockNode[]; nodesRef.current = next; onNodesChangeBase(changes); if (changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) record(before) }} onEdgesChange={(changes: EdgeChange<Edge>[]) => { const before = snapshot(); const next = applyEdgeChanges(changes, edgesRef.current); edgesRef.current = next; onEdgesChangeBase(changes); if (changes.some((change) => change.type === 'remove')) record(before) }} onConnect={onConnect} isValidConnection={isValidConnection} onSelectionChange={({ nodes: selected }: OnSelectionChangeParams) => setSelectedId(selected.length === 1 ? selected[0].id : null)} fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']}><Background variant={BackgroundVariant.Dots} gap={16} size={1} /><Controls /><MiniMap pannable zoomable /></ReactFlow></section>
+      <aside className="sidebar panel">
+        <details className="wire-filter" open>
+          <summary className="panel-title">Wire visibility</summary>
+          <div className="wire-filter-content">
+            <div className="wire-filter-actions">
+              <button onClick={() => setHiddenEdgeTypes(new Set())}>Show all</button>
+              <button onClick={() => setHiddenEdgeTypes(new Set(edgeTypeCounts.map(([key]) => key)))}>Hide all</button>
+            </div>
+            {edgeTypeCounts.length === 0 && <p className="empty-state">No connections yet.</p>}
+            {edgeTypeCounts.map(([key, count]) => <label className="wire-filter-item" key={key}>
+              <input type="checkbox" checked={!hiddenEdgeTypes.has(key)} onChange={(event) => {
+                const checked = event.target.checked
+                setHiddenEdgeTypes((previous) => {
+                  const next = new Set(previous)
+                  if (checked) next.delete(key); else next.add(key)
+                  return next
+                })
+              }} />
+              <span>{edgeTypeLabel(key)}</span><small>{count}</small>
+            </label>)}
+          </div>
+        </details>
+        <div className="palette"><div className="panel-title">External Ports</div><button className="library-item" onClick={() => addExternal('input')}><span className="library-icon">I</span><strong>External Input</strong></button><button className="library-item" onClick={() => addExternal('output')}><span className="library-icon">O</span><strong>External Output</strong></button><button className="library-item" onClick={() => addExternal('clock')}><span className="library-icon">C</span><strong>External Clock</strong></button><button className="library-item" onClick={() => addExternal('reset')}><span className="library-icon">R</span><strong>External Reset</strong></button>{interfaces.map((definition) => <div key={definition.name} className="interface-library-group"><div className="interface-library-label">{definition.label}</div><button className="library-item" onClick={() => addExternal('input', definition, 'master')}><span className="library-icon">M</span><strong>{definition.label} Master</strong></button><button className="library-item" onClick={() => addExternal('input', definition, 'slave')}><span className="library-icon">S</span><strong>{definition.label} Slave</strong></button></div>)}<div className="panel-title block-library-title">Block Library</div>{templates.map((template) => <button className="library-item" key={template.kind} onClick={() => addBlock(template)}><span className="library-icon">{template.kind.slice(0, 1)}</span><span><strong>{template.label}</strong><small>{template.kind}</small></span></button>)}</div>
+      </aside>
+      <section className="canvas-panel"><ReactFlow nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={(changes: NodeChange<BlockNode>[]) => { const before = snapshot(); const next = applyNodeChanges(changes, nodesRef.current) as BlockNode[]; nodesRef.current = next; onNodesChangeBase(changes); if (changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) record(before) }} onEdgesChange={(changes: EdgeChange<Edge>[]) => { const before = snapshot(); const next = applyEdgeChanges(changes, edgesRef.current); edgesRef.current = next; onEdgesChangeBase(changes); if (changes.some((change) => change.type === 'remove')) record(before) }} onConnect={onConnect} isValidConnection={isValidConnection} onSelectionChange={({ nodes: selected }: OnSelectionChangeParams) => setSelectedId(selected.length === 1 ? selected[0].id : null)} fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']}><Background variant={BackgroundVariant.Dots} gap={16} size={1} /><Controls /><MiniMap pannable zoomable /></ReactFlow></section>
       <aside className="properties panel"><div className="panel-title">Properties</div>{selectedNode ? <div className="property-form"><label>Name<input value={selectedNode.data.label} onChange={(event) => updateLabel(event.target.value)} /></label><label>Type<input value={selectedNode.data.kind} readOnly /></label>{isAxiInterconnect && <><button className="address-map-button" onClick={() => setAddressMapNodeId(selectedNode.id)}>Address Map</button><small className="address-map-summary">{selectedNode.data.addressMap?.entries.filter((entry) => entry.baseAddress && entry.size).length ?? 0} of {masterPorts.length} master ports configured</small></>}{(selectedNode.type === 'externalInput' || selectedNode.type === 'externalOutput') && <label>Width (bits)<input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateWidth(Number(event.target.value))} /></label>}<div className="property-section"><strong>Ports</strong>{selectedNode.data.ports.map((port) => <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? (port.width !== undefined ? `${port.direction} · ${port.width}-bit` : port.direction)}</small></div>)}</div><button className="danger" onClick={deleteSelected}>Delete node</button></div> : <p className="empty-state">Select a node to edit its properties.</p>}</aside>
     </div>
     <footer className="statusbar"><span role="status">{status}</span><span>{nodes.length} nodes · {edges.length} connections</span></footer>
