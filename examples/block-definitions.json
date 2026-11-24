@@ -1,12 +1,21 @@
 {
   "interfaces": [
+    { "name": "ahb", "label": "AHB" },
+    { "name": "apb", "label": "APB" },
     { "name": "axi", "label": "AXI" },
-    { "name": "i2c", "label": "I2C" }
+    { "name": "bram", "label": "BRAM" },
+    { "name": "gpio", "label": "GPIO" },
+    { "name": "i2c", "label": "I2C" },
+    { "name": "i3c", "label": "I3C" },
+    { "name": "jtag", "label": "JTAG" },
+    { "name": "spi", "label": "SPI" },
+    { "name": "uart", "label": "UART" },
+    { "name": "wb", "label": "Wishbone" }
   ],
   "blocks": [
     {
       "kind": "Counter",
-      "label": "Counter",
+      "label": "counter",
       "ports": [
         { "id": "clk", "name": "clk", "direction": "input", "width": 1 },
         { "id": "count", "name": "count", "direction": "output", "width": 32 }
@@ -14,7 +23,7 @@
     },
     {
       "kind": "CPU",
-      "label": "CPU",
+      "label": "cpu",
       "ports": [
         { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
         { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
@@ -23,12 +32,126 @@
       ]
     },
     {
-      "kind": "AXI_I2C",
-      "label": "AXI_I2C",
+      "kind": "AHB Interconnect",
+      "label": "ahb_interconnect",
       "ports": [
         { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "s0", "name": "s0", "direction": "input", "type": "ahb.slave" },
+        { "id": "s1", "name": "s1", "direction": "input", "type": "ahb.slave" },
+        { "id": "m0", "name": "m0", "direction": "output", "type": "ahb.master" },
+        { "id": "m1", "name": "m1", "direction": "output", "type": "ahb.master" },
+        { "id": "m2", "name": "m2", "direction": "output", "type": "ahb.master" },
+        { "id": "m3", "name": "m3", "direction": "output", "type": "ahb.master" },
+        { "id": "m4", "name": "m4", "direction": "output", "type": "ahb.master" },
+        { "id": "m5", "name": "m5", "direction": "output", "type": "ahb.master" },
+        { "id": "m6", "name": "m6", "direction": "output", "type": "ahb.master" },
+        { "id": "m7", "name": "m7", "direction": "output", "type": "ahb.master" }
+      ]
+    },
+    {
+      "kind": "AHB_BRAM",
+      "label": "ahb_bram",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "slave", "name": "slave", "direction": "input", "type": "ahb.slave" },
+        { "id": "bram", "name": "bram", "direction": "output", "type": "bram.master" }
+      ]
+    },
+    {
+      "kind": "AHB_GPIO",
+      "label": "ahb_gpio",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "slave", "name": "slave", "direction": "input", "type": "ahb.slave" },
+        { "id": "gpio", "name": "gpio", "direction": "output", "type": "gpio.master" }
+      ]
+    },
+    {
+      "kind": "AHB_I2C",
+      "label": "ahb_i2c",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "slave", "name": "slave", "direction": "input", "type": "ahb.slave" },
+        { "id": "i2c", "name": "i2c", "direction": "output", "type": "i2c.master" }
+      ]
+    },
+    {
+      "kind": "AHB_UART",
+      "label": "ahb_uart",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "slave", "name": "slave", "direction": "input", "type": "ahb.slave" },
+        { "id": "uart", "name": "uart", "direction": "output", "type": "uart.master" }
+      ]
+    },
+    {
+      "kind": "AXI Interconnect",
+      "label": "axi_interconnect",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "s0", "name": "s0", "direction": "input", "type": "axi.slave" },
+        { "id": "s1", "name": "s1", "direction": "input", "type": "axi.slave" },
+        { "id": "m0", "name": "m0", "direction": "output", "type": "axi.master" },
+        { "id": "m1", "name": "m1", "direction": "output", "type": "axi.master" },
+        { "id": "m2", "name": "m2", "direction": "output", "type": "axi.master" },
+        { "id": "m3", "name": "m3", "direction": "output", "type": "axi.master" },
+        { "id": "m4", "name": "m4", "direction": "output", "type": "axi.master" },
+        { "id": "m5", "name": "m5", "direction": "output", "type": "axi.master" },
+        { "id": "m6", "name": "m6", "direction": "output", "type": "axi.master" },
+        { "id": "m7", "name": "m7", "direction": "output", "type": "axi.master" }
+      ]
+    },
+    {
+      "kind": "AXI_BRAM",
+      "label": "axi_bram",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "slave", "name": "slave", "direction": "input", "type": "axi.slave" },
+        { "id": "bram", "name": "bram", "direction": "output", "type": "bram.master" }
+      ]
+    },
+    {
+      "kind": "AXI_GPIO",
+      "label": "axi_gpio",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "slave", "name": "slave", "direction": "input", "type": "axi.slave" },
+        { "id": "gpio", "name": "gpio", "direction": "output", "type": "gpio.master" }
+      ]
+    },
+    {
+      "kind": "AXI_I2C",
+      "label": "axi_i2c",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
         { "id": "slave", "name": "slave", "direction": "input", "type": "axi.slave" },
         { "id": "i2c", "name": "i2c", "direction": "output", "type": "i2c.master" }
+      ]
+    },
+    {
+      "kind": "AXI_UART",
+      "label": "axi_uart",
+      "ports": [
+        { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+        { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
+        { "id": "slave", "name": "slave", "direction": "input", "type": "axi.slave" },
+        { "id": "uart", "name": "uart", "direction": "output", "type": "uart.master" }
+      ]
+    },
+    {
+      "kind": "BRAM",
+      "label": "bram",
+      "ports": [
+        { "id": "bram", "name": "bram", "direction": "input", "type": "bram.slave" }
       ]
     }
   ]
