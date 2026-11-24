@@ -22,10 +22,22 @@ export interface AddressMapEntry {
   size: string | null
 }
 
-export interface AddressMap {
+export interface LegacyAddressMap {
   addressWidth: 32 | 64
   entries: AddressMapEntry[]
 }
+
+export interface AddressMapGroup {
+  slavePortId: string
+  entries: AddressMapEntry[]
+}
+
+export interface GroupedAddressMap {
+  addressWidth: 32 | 64
+  groups: AddressMapGroup[]
+}
+
+export type AddressMap = LegacyAddressMap | GroupedAddressMap
 
 export interface BlockTemplate {
   kind: string
