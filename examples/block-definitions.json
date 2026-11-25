@@ -127,7 +127,13 @@
         { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
         { "id": "slave", "name": "slave", "direction": "input", "type": "axi.slave" },
         { "id": "gpio", "name": "gpio", "direction": "output", "type": "gpio.master" }
-      ]
+      ],
+      "parameters": {
+        "WIDTH": { "type": "int", "value": "32" }
+      },
+      "defines": {
+        "DEBUG": { "enabled": true, "value": "1" }
+      }
     },
     {
       "kind": "AXI_I2C",
