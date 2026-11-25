@@ -71,6 +71,10 @@ button { cursor: pointer; }
 .property-form label { display: grid; gap: 5px; color: #64748b; font-size: 12px; }
 .property-form input { height: 34px; border: 1px solid #d8e0ea; border-radius: 6px; padding: 0 8px; color: #334155; background: #fff; }
 .property-section { display: grid; gap: 5px; font-size: 12px; }
+.property-form .settings-checkbox { display: flex; align-items: center; gap: 6px; color: inherit; }
+.property-form .settings-checkbox input { width: auto; height: auto; margin: 0; }
+.define-setting { display: grid; gap: 5px; }
+.settings-error { color: #b91c1c; }
 .port-property { display: grid; grid-template-columns: 1fr auto; gap: 6px; padding: 7px 0; border-bottom: 1px solid #edf1f5; }
 .port-property small { color: #94a3b8; }
 .empty-state { color: #94a3b8; font-size: 13px; }
@@ -196,6 +200,7 @@ button { cursor: pointer; }
 :root[data-theme='dark'] .address-map-table .end-address { color: #cbd5e1; }
 :root[data-theme='dark'] .statusbar { background: #111827; color: #9ca3af; }
 :root[data-theme='dark'] .danger { border-color: #7f1d1d; background: #2a171b; color: #f87171; }
+:root[data-theme='dark'] .settings-error { color: #f87171; }
 :root[data-theme='dark'] .address-map-backdrop { background: rgba(0, 0, 0, .66); }
 :root[data-theme='dark'] .address-map-modal { background: #111827; color: #e5e7eb; }
 :root[data-theme='dark'] .address-map-header,

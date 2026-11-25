@@ -39,17 +39,32 @@ export interface GroupedAddressMap {
 
 export type AddressMap = LegacyAddressMap | GroupedAddressMap
 
+export interface ParameterSetting {
+  type: string
+  value: string
+}
+
+export type ParameterValue = ParameterSetting | string | number | boolean
+
+export interface DefineValue {
+  enabled: boolean
+  value: string
+}
+
 export interface BlockTemplate {
   kind: string
   label: string
   ports: BlockPort[]
+  parameters?: Record<string, ParameterSetting>
+  defines?: Record<string, DefineValue>
 }
 
 export interface BlockData extends Record<string, unknown> {
   label: string
   kind: string
   ports: BlockPort[]
-  parameters: Record<string, string | number | boolean>
+  parameters: Record<string, ParameterValue>
+  defines?: Record<string, DefineValue>
   addressMap?: AddressMap
 }
 
