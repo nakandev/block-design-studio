@@ -27,6 +27,16 @@ The `signals` directions are relative to the master; the slave uses the opposite
 
 The example `ahb` and `axi` interfaces describe AHB-Lite and AXI4-Lite respectively. In AHB-Lite, `HREADY` is an input on both roles, while `HSEL` and `HREADYOUT` are slave-specific; their interconnect routing is not represented by simple signal reversal. Clock and reset remain separate block ports. These definitions describe signals only: they do not validate parameter ranges, check interface compatibility, or generate RTL.
 
+## RTL generation
+
+With Python 3.9 or later, start the Python backend with `npm run backend` and the Vite frontend with `npm run dev` in separate terminals. The frontend proxies `/api` requests to the loopback backend. **Generate RTL** posts the current design and loaded definitions to `/api/rtl/generate` and downloads a ZIP containing `top.sv` and `rtl-manifest.json`.
+
+The backend generates a structural top-level module: block module names come from `kind` after SystemVerilog identifier sanitization, interface pins are flattened as `<port name>_<signal name>`, scalar ports use their sanitized configured names, and signal directions and widths are checked on each connection. Interface width expressions use matching block parameters when present or the interface parameter defaults otherwise. Only configured, materialized ports are emitted; generation templates and Address Maps are ignored.
+
+The generated archive intentionally does not contain block RTL source files yet. Its manifest lists the expected modules and makes this limitation explicit; the generated top is not compile-ready until those modules are supplied. A future package manager can stage the selected sources in a per-job temporary directory. Connections with role-specific signals or incompatible directions/widths (including AHB-Lite routing such as `HREADYOUT` to `HREADY`) fail rather than producing guessed wiring. Interconnect-specific routing and Address Maps are not generated.
+
+Run backend tests with `npm run test:backend`.
+
 Exported and browser-saved designs include an `interfaceSource` with `path` and `version` on each interface port and generated port definition. Generated ports inherit their definition's source. Paths are relative to the loaded manifest's folder; unknown sources have `null` path and version. Older designs with per-node `interfaceSources` are migrated to per-port sources when opened or saved.
 
 For example, an interface port can include `"interfaceSource": { "path": "interface/ahb.json", "version": "0.1.0" }`. Individual generated-port sources are retained when ports are disabled or their count is reduced and later restored.

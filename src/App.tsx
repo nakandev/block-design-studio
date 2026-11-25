@@ -132,6 +132,7 @@ export default function App() {
   const [addressMapNodeId, setAddressMapNodeId] = useState<string | null>(null)
   const [designName, setDesignName] = useState('untitled')
   const [status, setStatus] = useState('Ready')
+  const [generatingRTL, setGeneratingRTL] = useState(false)
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(() => new Set())
   const [, renderHistory] = useState(0)
   const designFileRef = useRef<HTMLInputElement>(null)
@@ -407,10 +408,39 @@ export default function App() {
   }
   const saveDesign = () => { localStorage.setItem(STORAGE_KEY, JSON.stringify(designDocument())); setStatus('Saved in browser storage') }
   const exportDesign = () => { const blob = new Blob([JSON.stringify(designDocument(), null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${designName || 'block-design'}.json`; anchor.click(); URL.revokeObjectURL(url) }
+  const generateRTL = async () => {
+    setGeneratingRTL(true)
+    setStatus('Generating RTL')
+    try {
+      const response = await fetch('/api/rtl/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ design: designDocument(), interfaces, blocks: templates }),
+      })
+      if (!response.ok) {
+        const contentType = response.headers.get('content-type') ?? ''
+        const message = contentType.includes('application/json')
+          ? (await response.json() as { error?: string }).error
+          : await response.text()
+        throw new Error(message || `Backend returned HTTP ${response.status}`)
+      }
+      const url = URL.createObjectURL(await response.blob())
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${designName || 'block-design'}-rtl.zip`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setStatus('RTL package downloaded')
+    } catch (error) {
+      setStatus(`RTL generation failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setGeneratingRTL(false)
+    }
+  }
 
   const addressMapNode = nodes.find((node) => node.id === addressMapNodeId)
   return <main className="app-shell">
-    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFileRef.current?.click()}>Load definitions</button><input ref={definitionsFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadDefinitions(async () => ({ value: JSON.parse(await file.text()) })); event.target.value = '' }} /><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(async () => { const value = await loadDefinitionFolder(files); return { value, sources: value.sources } }); event.target.value = '' }} /><button onClick={saveDesign}>Save</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFileRef.current?.click()}>Load definitions</button><input ref={definitionsFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadDefinitions(async () => ({ value: JSON.parse(await file.text()) })); event.target.value = '' }} /><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(async () => { const value = await loadDefinitionFolder(files); return { value, sources: value.sources } }); event.target.value = '' }} /><button onClick={saveDesign}>Save</button><button onClick={() => void generateRTL()} disabled={generatingRTL}>{generatingRTL ? 'Generating RTL…' : 'Generate RTL'}</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
     <div className="workspace">
       <aside className="sidebar panel">
         <details className="wire-filter" open>
