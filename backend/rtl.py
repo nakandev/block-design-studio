@@ -336,6 +336,9 @@ def make_top(payload: Any) -> tuple[str, dict[str, Any]]:
         data = node.get("data")
         node_ports = get_ports(data, node_id)
         if node_type == "block":
+            label = data.get("label")
+            if not isinstance(label, str) or not label.strip():
+                raise GenerationError(f"Block {node_id} needs a nonempty label for RTL naming")
             kind = data.get("kind")
             template = blocks.get(kind)
             if template is None:
@@ -540,7 +543,9 @@ def make_top(payload: Any) -> tuple[str, dict[str, Any]]:
             net_name = top_members[0]["top_name"]
         else:
             first = group[0]
-            net_name = identifier(f"net_{first['node_id']}_{first['port_id']}_{first['signal'] or 'sig'}", "net")
+            label = nodes_by_id[first["node_id"]]["data"]["label"]
+            suffix = first["sv_name"] if first["signal"] else f"{first['sv_name']}_sig"
+            net_name = identifier(f"net_{label}_{suffix}", "net")
             if net_name in top_names:
                 raise GenerationError(f"Internal net name collides with a top-level port: {net_name}")
         previous_owner = net_owners.get(net_name)
@@ -591,9 +596,9 @@ def make_top(payload: Any) -> tuple[str, dict[str, Any]]:
 
     instance_names: set[str] = set()
     for node_id, (data, template, module, params) in block_info.items():
-        instance = identifier(f"u_{node_id}", "u")
+        instance = identifier(f"u_{data['label']}", "u")
         if instance in instance_names:
-            raise GenerationError(f"Block instance names collide after sanitizing: {instance}")
+            raise GenerationError(f"Block labels produce duplicate instance name {instance}; rename the blocks")
         instance_names.add(instance)
         parameter_overrides = []
         template_parameters = template.get("parameters") or {}

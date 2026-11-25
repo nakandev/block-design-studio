@@ -99,6 +99,37 @@ class RTLGenerationTests(unittest.TestCase):
         self.assertIn(".out(net_src_out_sig)", top)
         self.assertEqual(top.count(".in(net_src_out_sig)"), 2)
 
+    def test_uses_labels_and_port_names_instead_of_ids(self):
+        source = block_node("node-123", "Source Block", [
+            {"id": "port-456", "name": "bus", "direction": "output", "type": "bus.master"},
+            {"id": "port-999", "name": "done", "direction": "output", "width": 1},
+        ], {"DATA_WIDTH": 8})
+        source["data"]["label"] = "CPU core"
+        sink = block_node("node-789", "Sink", [
+            {"id": "target-123", "name": "link", "direction": "input", "type": "bus.slave"},
+        ], {"DATA_WIDTH": 8})
+        sink["data"]["label"] = "Memory"
+        edge = {"source": "node-123", "sourceHandle": "port-456", "target": "node-789", "targetHandle": "target-123"}
+        top, _ = make_top(payload([source, sink], [edge], [self.interface], self.blocks))
+        self.assertIn(") u_CPU_core (", top)
+        self.assertIn(") u_Memory (", top)
+        self.assertIn(".bus_DATA(net_CPU_core_bus_DATA)", top)
+        self.assertIn(".link_DATA(net_CPU_core_bus_DATA)", top)
+        self.assertIn(".done(net_CPU_core_done_sig)", top)
+        self.assertNotIn("node_123", top)
+        self.assertNotIn("port_456", top)
+
+    def test_rejects_empty_or_colliding_block_labels(self):
+        a = block_node("first", "Sink", [])
+        b = block_node("second", "Sink", [])
+        a["data"]["label"] = "same-label"
+        b["data"]["label"] = "same label"
+        with self.assertRaisesRegex(GenerationError, "duplicate instance name.*rename"):
+            make_top(payload([a, b], [], blocks=self.blocks))
+        a["data"]["label"] = " "
+        with self.assertRaisesRegex(GenerationError, "nonempty label"):
+            make_top(payload([a], [], blocks=self.blocks))
+
     def test_external_interface_port_becomes_top_level_port(self):
         source = block_node("src", "Source Block", [
             {"id": "link", "name": "link", "direction": "output", "type": "bus.master"},

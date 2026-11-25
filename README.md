@@ -33,6 +33,8 @@ With Python 3.9 or later, start the Python backend with `npm run backend` and th
 
 The backend generates a structural top-level module: block module names come from `kind` after SystemVerilog identifier sanitization, interface pins are flattened as `<port name>_<signal name>`, scalar ports use their sanitized configured names, and signal directions and widths are checked on each connection. Interface width expressions use matching block parameters when present or the interface parameter defaults otherwise. Only configured, materialized ports are emitted; generation templates and Address Maps are ignored.
 
+Instance names and internal wire names are derived from block labels and port names, not node or port IDs. Labels must be nonempty and must not collide after identifier sanitization; rename blocks if generation reports a collision.
+
 The generated archive intentionally does not contain block RTL source files yet. Its manifest lists the expected modules and makes this limitation explicit; the generated top is not compile-ready until those modules are supplied. A future package manager can stage the selected sources in a per-job temporary directory. Connections with role-specific signals or incompatible directions/widths (including AHB-Lite routing such as `HREADYOUT` to `HREADY`) fail rather than producing guessed wiring. Interconnect-specific routing and Address Maps are not generated.
 
 Run backend tests with `npm run test:backend`.
