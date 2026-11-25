@@ -3,12 +3,13 @@ import { after, before, test } from 'node:test'
 import { createServer } from 'vite'
 import { readFile } from 'node:fs/promises'
 
-let server, bus, generated, validateDefinitions
+let server, bus, generated, validateDefinitions, loadDefinitionFolder
 before(async () => {
   server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
   bus = await server.ssrLoadModule('/src/bus.ts')
   generated = await server.ssrLoadModule('/src/generatedPorts.ts')
   ;({ validateDefinitions } = await server.ssrLoadModule('/src/App.tsx'))
+  ;({ loadDefinitionFolder } = await server.ssrLoadModule('/src/definitionManifest.ts'))
 })
 after(async () => { await server?.close() })
 
@@ -32,7 +33,12 @@ test('validates bus interfaces and preserves legacy AXI designs', () => {
 })
 
 test('loads example AHB bus definitions without altering interface port directions', async () => {
-  const file = JSON.parse(await readFile(new URL('../examples/block-definitions.json', import.meta.url), 'utf8'))
+  const manifest = JSON.parse(await readFile(new URL('../examples/block-definitions.json', import.meta.url), 'utf8'))
+  const files = [{ webkitRelativePath: 'examples/block-definitions.json', text: async () => JSON.stringify(manifest) }]
+  for (const ref of [...manifest.interfaces, ...manifest.blocks]) {
+    files.push({ webkitRelativePath: `examples/${ref.path}`, text: () => readFile(new URL(`../examples/${ref.path}`, import.meta.url), 'utf8') })
+  }
+  const file = await loadDefinitionFolder(files)
   const { blocks } = validateDefinitions(file)
   const ahb = blocks.find((block) => block.kind === 'AHB Interconnect')
   assert.deepEqual(ahb.bus, { interface: 'ahb' })

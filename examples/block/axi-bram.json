@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0",
+  "kind": "AXI_BRAM",
+  "label": "axi_bram",
+  "ports": [
+    {
+      "id": "clk",
+      "name": "clk",
+      "direction": "input",
+      "type": "clock"
+    },
+    {
+      "id": "rst",
+      "name": "rst",
+      "direction": "input",
+      "type": "reset"
+    },
+    {
+      "id": "slave",
+      "name": "slave",
+      "direction": "input",
+      "type": "axi.slave"
+    },
+    {
+      "id": "bram",
+      "name": "bram",
+      "direction": "output",
+      "type": "bram.master"
+    }
+  ]
+}

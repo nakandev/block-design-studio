@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0",
+  "kind": "CPU",
+  "label": "cpu",
+  "ports": [
+    {
+      "id": "clk",
+      "name": "clk",
+      "direction": "input",
+      "type": "clock"
+    },
+    {
+      "id": "rst",
+      "name": "rst",
+      "direction": "input",
+      "type": "reset"
+    },
+    {
+      "id": "imem",
+      "name": "imem",
+      "direction": "output",
+      "type": "axi.master"
+    },
+    {
+      "id": "dmem",
+      "name": "dmem",
+      "direction": "output",
+      "type": "axi.master"
+    }
+  ]
+}

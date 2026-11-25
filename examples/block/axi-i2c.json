@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0",
+  "kind": "AXI_I2C",
+  "label": "axi_i2c",
+  "ports": [
+    {
+      "id": "clk",
+      "name": "clk",
+      "direction": "input",
+      "type": "clock"
+    },
+    {
+      "id": "rst",
+      "name": "rst",
+      "direction": "input",
+      "type": "reset"
+    },
+    {
+      "id": "slave",
+      "name": "slave",
+      "direction": "input",
+      "type": "axi.slave"
+    },
+    {
+      "id": "i2c",
+      "name": "i2c",
+      "direction": "output",
+      "type": "i2c.master"
+    }
+  ]
+}

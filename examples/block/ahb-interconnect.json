@@ -1,0 +1,82 @@
+{
+  "version": "0.1.0",
+  "kind": "AHB Interconnect",
+  "label": "ahb_interconnect",
+  "bus": {
+    "interface": "ahb"
+  },
+  "ports": [
+    {
+      "id": "clk",
+      "name": "clk",
+      "direction": "input",
+      "type": "clock"
+    },
+    {
+      "id": "rst",
+      "name": "rst",
+      "direction": "input",
+      "type": "reset"
+    },
+    {
+      "id": "s0",
+      "name": "s0",
+      "direction": "input",
+      "type": "ahb.slave"
+    },
+    {
+      "id": "s1",
+      "name": "s1",
+      "direction": "input",
+      "type": "ahb.slave"
+    },
+    {
+      "id": "m0",
+      "name": "m0",
+      "direction": "output",
+      "type": "ahb.master"
+    },
+    {
+      "id": "m1",
+      "name": "m1",
+      "direction": "output",
+      "type": "ahb.master"
+    },
+    {
+      "id": "m2",
+      "name": "m2",
+      "direction": "output",
+      "type": "ahb.master"
+    },
+    {
+      "id": "m3",
+      "name": "m3",
+      "direction": "output",
+      "type": "ahb.master"
+    },
+    {
+      "id": "m4",
+      "name": "m4",
+      "direction": "output",
+      "type": "ahb.master"
+    },
+    {
+      "id": "m5",
+      "name": "m5",
+      "direction": "output",
+      "type": "ahb.master"
+    },
+    {
+      "id": "m6",
+      "name": "m6",
+      "direction": "output",
+      "type": "ahb.master"
+    },
+    {
+      "id": "m7",
+      "name": "m7",
+      "direction": "output",
+      "type": "ahb.master"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0",
+  "kind": "AHB_I2C",
+  "label": "ahb_i2c",
+  "ports": [
+    {
+      "id": "clk",
+      "name": "clk",
+      "direction": "input",
+      "type": "clock"
+    },
+    {
+      "id": "rst",
+      "name": "rst",
+      "direction": "input",
+      "type": "reset"
+    },
+    {
+      "id": "slave",
+      "name": "slave",
+      "direction": "input",
+      "type": "ahb.slave"
+    },
+    {
+      "id": "i2c",
+      "name": "i2c",
+      "direction": "output",
+      "type": "i2c.master"
+    }
+  ]
+}

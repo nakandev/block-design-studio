@@ -1,0 +1,19 @@
+{
+  "version": "0.1.0",
+  "kind": "Counter",
+  "label": "counter",
+  "ports": [
+    {
+      "id": "clk",
+      "name": "clk",
+      "direction": "input",
+      "width": 1
+    },
+    {
+      "id": "count",
+      "name": "count",
+      "direction": "output",
+      "width": 32
+    }
+  ]
+}

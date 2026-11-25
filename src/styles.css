@@ -14,7 +14,8 @@ button { cursor: pointer; }
 .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: #2563eb; color: white; font-size: 12px; font-weight: 800; }
 .design-name { height: 34px; border: 1px solid transparent; border-radius: 6px; padding: 0 8px; color: #334155; background: transparent; }
 .design-name:hover, .design-name:focus { border-color: #d1d9e5; background: #fff; }
-.top-actions { display: flex; justify-content: flex-end; gap: 6px; min-width: 0; }
+.top-actions { display: flex; justify-content: flex-start; gap: 6px; min-width: 0; overflow-x: auto; }
+.top-actions > :first-child { margin-left: auto; }
 .top-actions button { height: 34px; border: 1px solid #d6dde8; border-radius: 6px; background: #fff; color: #334155; padding: 0 12px; white-space: nowrap; }
 .top-actions select { height: 34px; border: 1px solid #d6dde8; border-radius: 6px; background: #fff; color: #334155; padding: 0 8px; }
 .top-actions button:hover { background: #f8fafc; }
@@ -87,6 +88,7 @@ button { cursor: pointer; }
   .topbar { grid-template-columns: 1fr; height: auto; }
   .app-shell { height: 100vh; grid-template-rows: auto minmax(0, 1fr) 28px; }
   .top-actions { overflow-x: auto; justify-content: flex-start; }
+  .top-actions > :first-child { margin-left: 0; }
 }
 
 .address-map-button { height: 34px; width: 100%; border: 1px solid #2563eb; border-radius: 6px; background: #fff; color: #2563eb; font-weight: 700; }

@@ -1,0 +1,13 @@
+{
+  "version": "0.1.0",
+  "kind": "BRAM",
+  "label": "bram",
+  "ports": [
+    {
+      "id": "bram",
+      "name": "bram",
+      "direction": "input",
+      "type": "bram.slave"
+    }
+  ]
+}

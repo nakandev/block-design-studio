@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0",
+  "kind": "AXI_UART",
+  "label": "axi_uart",
+  "ports": [
+    {
+      "id": "clk",
+      "name": "clk",
+      "direction": "input",
+      "type": "clock"
+    },
+    {
+      "id": "rst",
+      "name": "rst",
+      "direction": "input",
+      "type": "reset"
+    },
+    {
+      "id": "slave",
+      "name": "slave",
+      "direction": "input",
+      "type": "axi.slave"
+    },
+    {
+      "id": "uart",
+      "name": "uart",
+      "direction": "output",
+      "type": "uart.master"
+    }
+  ]
+}

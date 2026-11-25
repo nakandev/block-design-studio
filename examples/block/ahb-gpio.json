@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0",
+  "kind": "AHB_GPIO",
+  "label": "ahb_gpio",
+  "ports": [
+    {
+      "id": "clk",
+      "name": "clk",
+      "direction": "input",
+      "type": "clock"
+    },
+    {
+      "id": "rst",
+      "name": "rst",
+      "direction": "input",
+      "type": "reset"
+    },
+    {
+      "id": "slave",
+      "name": "slave",
+      "direction": "input",
+      "type": "ahb.slave"
+    },
+    {
+      "id": "gpio",
+      "name": "gpio",
+      "direction": "output",
+      "type": "gpio.master"
+    }
+  ]
+}
