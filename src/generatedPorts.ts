@@ -1,5 +1,5 @@
 import type { Edge } from '@xyflow/react'
-import type { AddressMap, BlockData, BlockPort, PortGenerate } from './types'
+import type { AddressMap, BlockData, BlockPort, PortConfig, PortGenerate } from './types'
 
 const has = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
 
@@ -56,22 +56,70 @@ export function generatedPorts(definitions: BlockPort[], counts: Record<string, 
     .filter((port) => !definition.generate?.if || (has(enabled, port.id) ? enabled[port.id] : definition.generate.if.default)))
 }
 
-export function initialPortConfiguration(definitions: BlockPort[]) {
-  return {
-    portDefinitions: definitions.map((port) => structuredClone(port)),
-    portCounts: Object.fromEntries(definitions.filter((port) => port.generate?.for).map((port) => [port.id, port.generate!.for!.count])),
-    portEnabled: {},
+export function completePortConfig(definitions: BlockPort[], counts: Record<string, number>, enabled: Record<string, boolean>): PortConfig {
+  const countEntries = Object.entries(counts)
+  const enabledEntries = Object.entries(enabled)
+  for (const definition of definitions) {
+    const loop = definition.generate?.for
+    let count = 1
+    if (loop) {
+      count = has(counts, definition.id) ? counts[definition.id] : loop.count
+      if (!Number.isInteger(count) || count < loop.min || count > loop.max) throw new Error(`Invalid count for port ${definition.id}`)
+      countEntries.push([definition.id, count])
+    }
+    if (definition.generate?.if) {
+      for (const port of expandDefinition(definition, count)) {
+        const value = has(enabled, port.id) ? enabled[port.id] : definition.generate.if.default
+        if (typeof value !== 'boolean') throw new Error(`Invalid enabled state for port ${port.id}`)
+        enabledEntries.push([port.id, value])
+      }
+    }
   }
+  return { counts: Object.fromEntries(countEntries), enabled: Object.fromEntries(enabledEntries) }
+}
+
+export function initialPortConfiguration(definitions: BlockPort[]) {
+  const portDefinitions = definitions.map((port) => structuredClone(port))
+  return {
+    portDefinitions,
+    config: { ports: completePortConfig(portDefinitions, {}, {}) },
+  }
+}
+
+function validateSavedRecord(value: unknown, label: string, isValid: (entry: unknown) => boolean) {
+  if (value === undefined) return
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.values(value).some((entry) => !isValid(entry))) {
+    throw new Error(`Invalid ${label} in port configuration`)
+  }
+}
+
+export function migratePortConfiguration(data: BlockData): BlockData {
+  const { portCounts, portEnabled, ...rest } = data
+  if (data.config !== undefined && (!data.config || typeof data.config !== 'object' || Array.isArray(data.config))) throw new Error('Invalid block config')
+  const existing = data.config?.ports
+  if (existing !== undefined && (!existing || typeof existing !== 'object' || Array.isArray(existing))) throw new Error('Invalid port configuration')
+  const isCount = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+  const isEnabled = (value: unknown) => typeof value === 'boolean'
+  validateSavedRecord(portCounts, 'legacy counts', isCount)
+  validateSavedRecord(portEnabled, 'legacy enabled states', isEnabled)
+  validateSavedRecord(existing?.counts, 'counts', isCount)
+  validateSavedRecord(existing?.enabled, 'enabled states', isEnabled)
+  if (!data.portDefinitions && !existing && !portCounts && !portEnabled) return data
+  const counts = { ...portCounts, ...existing?.counts }
+  const enabled = { ...portEnabled, ...existing?.enabled }
+  const ports = data.portDefinitions ? completePortConfig(data.portDefinitions, counts, enabled) : { counts, enabled }
+  return { ...rest, config: { ...data.config, ports } }
 }
 
 export function adoptPortDefinitions(data: BlockData, definitions: BlockPort[]): BlockData {
   if (data.portDefinitions || !definitions.some((port) => port.generate)) return data
   const config = initialPortConfiguration(definitions)
-  const expected = generatedPorts(config.portDefinitions, config.portCounts, config.portEnabled)
+  const settings = completePortConfig(config.portDefinitions, data.config?.ports?.counts ?? {}, data.config?.ports?.enabled ?? {})
+  const expected = generatedPorts(config.portDefinitions, settings.counts, settings.enabled)
   if (expected.length !== data.ports.length || expected.some((port) => !data.ports.some((existing) =>
     existing.id === port.id && existing.name === port.name && existing.type === port.type &&
     existing.direction === port.direction && existing.width === port.width))) return data
-  return { ...data, ...config }
+  return { ...data, portDefinitions: config.portDefinitions, config: { ...data.config, ports: settings } }
 }
 
 export function removeAddressMapPorts(map: AddressMap | undefined, removed: Set<string>, ports: BlockPort[]): AddressMap | undefined {
@@ -112,7 +160,7 @@ export function planPortChange(nodeId: string, data: BlockData, edges: Edge[], c
   const addressMap = removeAddressMapPorts(data.addressMap, removed, data.ports)
   return {
     removed, disconnected, mappings,
-    data: { ...data, ports, portCounts: counts, portEnabled: enabled, ...(addressMap ? { addressMap } : {}) },
+    data: { ...data, ports, config: { ...data.config, ports: completePortConfig(data.portDefinitions, counts, enabled) }, ...(addressMap ? { addressMap } : {}) },
     edges: edges.filter((edge) => !disconnected.includes(edge)),
   }
 }

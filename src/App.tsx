@@ -15,7 +15,7 @@ import BlockSettingsEditor from './BlockSettingsEditor'
 import GeneratedPortsEditor from './GeneratedPortsEditor'
 import OrthogonalEdge from './OrthogonalEdge'
 import { mergeBlockSettings, validateBlockSettings } from './blockSettings'
-import { adoptPortDefinitions, expandDefinition, generatedPorts, initialPortConfiguration, planPortChange, validateGenerate, validatePortIds } from './generatedPorts'
+import { adoptPortDefinitions, expandDefinition, generatedPorts, initialPortConfiguration, migratePortConfiguration, planPortChange, validateGenerate, validatePortIds } from './generatedPorts'
 import type { AddressMap, BlockPort, BlockTemplate, DefineValue, DesignDocument, InterfacePortType, InterfaceDefinition, ParameterValue } from './types'
 
 const STORAGE_KEY = 'block-design-studio-document-v1'
@@ -259,7 +259,7 @@ export default function App() {
     const before = snapshot()
     const id = `${template.kind.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`
     const config = template.ports.some((port) => port.generate) ? initialPortConfiguration(template.ports) : undefined
-    const ports = config ? generatedPorts(config.portDefinitions, config.portCounts, config.portEnabled) : template.ports.map((port) => ({ ...port }))
+    const ports = config ? generatedPorts(config.portDefinitions, config.config.ports.counts, config.config.ports.enabled) : template.ports.map((port) => ({ ...port }))
     const addressMap: AddressMap | undefined = template.kind === 'AXI Interconnect'
       ? { addressWidth: 32, groups: ports.filter((port) => port.type === 'axi.slave').map((port) => ({ slavePortId: port.id, entries: ports.filter((master) => master.type === 'axi.master').map((master) => ({ portId: master.id, baseAddress: null, size: null })) })) }
       : undefined
@@ -334,15 +334,15 @@ export default function App() {
     const data = nodesRef.current.find((node) => node.id === selectedId)?.data
     const loop = definition.generate?.for
     if (!data || !loop || !Number.isInteger(count) || count < loop.min || count > loop.max) return
-    const oldCount = data.portCounts?.[definition.id] ?? loop.count
+    const oldCount = data.config?.ports?.counts[definition.id] ?? loop.count
     const discarded = new Set(expandDefinition(definition, oldCount).slice(count).map((port) => port.id))
-    const enabled = Object.fromEntries(Object.entries(data.portEnabled ?? {}).filter(([id]) => !discarded.has(id)))
-    updateGeneratedPorts({ ...data.portCounts, [definition.id]: count }, enabled, discarded)
+    const enabled = Object.fromEntries(Object.entries(data.config?.ports?.enabled ?? {}).filter(([id]) => !discarded.has(id)))
+    updateGeneratedPorts({ ...data.config?.ports?.counts, [definition.id]: count }, enabled, discarded)
   }
   const updatePortEnabled = (port: BlockPort, enabled: boolean) => {
     const data = nodesRef.current.find((node) => node.id === selectedId)?.data
     if (!data) return
-    updateGeneratedPorts(data.portCounts ?? {}, { ...data.portEnabled, [port.id]: enabled }, enabled ? new Set() : new Set([port.id]))
+    updateGeneratedPorts(data.config?.ports?.counts ?? {}, { ...data.config?.ports?.enabled, [port.id]: enabled }, enabled ? new Set() : new Set([port.id]))
   }
   const applyAddressMap = (addressMap: AddressMap) => {
     if (!addressMapNodeId) return
@@ -376,7 +376,7 @@ export default function App() {
     catch (error) { setStatus(error instanceof Error ? `Definition error: ${error.message}` : 'Could not load definitions') }
   }
   const openDesign = async (file: File) => {
-    try { const document = JSON.parse(await file.text()) as DesignDocument; if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format'); const next = mergeDefinitions(document.nodes as BlockNode[], templates); replace(next, document.edges as Edge[]); setDesignName(document.name || 'untitled'); setSelectedId(null); setStatus(`Design opened${migrationWarning(next, templates)}`) }
+    try { const document = JSON.parse(await file.text()) as DesignDocument; if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format'); const restored = (document.nodes as BlockNode[]).map((node) => ({ ...node, data: migratePortConfiguration(node.data) })); const next = mergeDefinitions(restored, templates); replace(next, document.edges as Edge[]); setDesignName(document.name || 'untitled'); setSelectedId(null); setStatus(`Design opened${migrationWarning(next, templates)}`) }
     catch (error) { setStatus(error instanceof Error ? error.message : 'Could not open design') }
   }
   const saveDesign = () => { localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current })); setStatus('Saved in browser storage') }

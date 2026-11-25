@@ -57,6 +57,15 @@ export interface DefineValue {
   value: string
 }
 
+export interface PortConfig {
+  counts: Record<string, number>
+  enabled: Record<string, boolean>
+}
+
+export interface BlockConfig {
+  ports?: PortConfig
+}
+
 export interface BlockTemplate {
   kind: string
   label: string
@@ -70,6 +79,7 @@ export interface BlockData extends Record<string, unknown> {
   kind: string
   ports: BlockPort[]
   portDefinitions?: BlockPort[]
+  config?: BlockConfig
   portCounts?: Record<string, number>
   portEnabled?: Record<string, boolean>
   parameters: Record<string, ParameterValue>

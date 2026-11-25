@@ -28,11 +28,11 @@ export default function GeneratedPortsEditor({ data, onCountChange, onEnabledCha
   if (!data.portDefinitions) return null
   return <div className="property-section"><strong>Port configuration</strong>
     {data.portDefinitions.filter((definition) => definition.generate).map((definition) => {
-      const count = data.portCounts?.[definition.id] ?? definition.generate?.for?.count ?? 1
+      const count = data.config?.ports?.counts[definition.id] ?? definition.generate?.for?.count ?? 1
       return <div className="define-setting" key={definition.id}>
         {definition.generate?.for && <CountEditor definition={definition} count={count} onChange={(value) => onCountChange(definition, value)} />}
         {definition.generate?.if && expandDefinition(definition, count).map((port) => <label className="settings-checkbox" key={port.id}>
-          <input type="checkbox" aria-label={`Enable port ${port.name}`} checked={data.portEnabled && Object.prototype.hasOwnProperty.call(data.portEnabled, port.id) ? data.portEnabled[port.id] : definition.generate!.if!.default} onChange={(event) => onEnabledChange(port, event.target.checked)} />{port.name}
+          <input type="checkbox" aria-label={`Enable port ${port.name}`} checked={data.config?.ports && Object.prototype.hasOwnProperty.call(data.config.ports.enabled, port.id) ? data.config.ports.enabled[port.id] : definition.generate!.if!.default} onChange={(event) => onEnabledChange(port, event.target.checked)} />{port.name}
         </label>)}
       </div>
     })}
