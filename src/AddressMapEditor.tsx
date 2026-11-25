@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { Edge } from '@xyflow/react'
 import type { BlockNode } from './BlockNode'
 import type { AddressMapEntry, GroupedAddressMap } from './types'
+import { busPorts, getBus } from './bus'
 
 interface AddressMapEditorProps {
   node: BlockNode
@@ -47,8 +48,8 @@ function validate(entries: DraftEntry[], addressWidth: 32 | 64) {
 }
 
 export default function AddressMapEditor({ node, nodes, edges, onCancel, onApply }: AddressMapEditorProps) {
-  const masterPorts = node.data.ports.filter((port) => port.type === 'axi.master')
-  const slavePorts = node.data.ports.filter((port) => port.type === 'axi.slave')
+  const bus = getBus(node.data)
+  const { masters: masterPorts, slaves: slavePorts } = busPorts(node.data.ports, bus)
   const value = node.data.addressMap
   const [addressWidth, setAddressWidth] = useState<32 | 64>(value?.addressWidth ?? 32)
   const [groups, setGroups] = useState<DraftGroup[]>(() => slavePorts.map((port) => {
@@ -126,7 +127,7 @@ export default function AddressMapEditor({ node, nodes, edges, onCancel, onApply
             <button type="button" onClick={() => setExpanded(new Set())}>Collapse all</button>
           </div>
           {value && 'entries' in value && <p className="address-map-notice">Existing address ranges are copied to each slave group when applied.</p>}
-          {slavePorts.length === 0 && <p className="address-map-notice">No AXI slave ports are available. Existing settings cannot be changed.</p>}
+          {slavePorts.length === 0 && <p className="address-map-notice">No {bus?.interface.toUpperCase()} slave ports are available. Existing settings cannot be changed.</p>}
           {validated.map((group) => {
             const port = slavePorts.find((item) => item.id === group.slavePortId)!
             const errors = group.ranges.filter((range) => range.status !== 'Valid' && range.status !== 'Unassigned').length

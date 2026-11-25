@@ -1,5 +1,6 @@
 import type { Edge } from '@xyflow/react'
 import type { AddressMap, BlockData, BlockPort, PortConfig, PortGenerate } from './types'
+import { busPorts, getBus } from './bus'
 
 const has = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
 
@@ -122,12 +123,13 @@ export function adoptPortDefinitions(data: BlockData, definitions: BlockPort[]):
   return { ...data, portDefinitions: config.portDefinitions, config: { ...data.config, ports: settings } }
 }
 
-export function removeAddressMapPorts(map: AddressMap | undefined, removed: Set<string>, ports: BlockPort[]): AddressMap | undefined {
+export function removeAddressMapPorts(map: AddressMap | undefined, removed: Set<string>, ports: BlockPort[], interfaceName = 'axi'): AddressMap | undefined {
   if (!map || !removed.size) return map
   if ('entries' in map) {
     const entries = map.entries.filter((entry) => !removed.has(entry.portId))
-    if (ports.some((port) => port.type === 'axi.slave' && removed.has(port.id))) {
-      return { addressWidth: map.addressWidth, groups: ports.filter((port) => port.type === 'axi.slave' && !removed.has(port.id)).map((port) => ({ slavePortId: port.id, entries: entries.map((entry) => ({ ...entry })) })) }
+    const slaves = busPorts(ports, { interface: interfaceName }).slaves
+    if (slaves.some((port) => removed.has(port.id))) {
+      return { addressWidth: map.addressWidth, groups: slaves.filter((port) => !removed.has(port.id)).map((port) => ({ slavePortId: port.id, entries: entries.map((entry) => ({ ...entry })) })) }
     }
     return { ...map, entries }
   }
@@ -136,10 +138,10 @@ export function removeAddressMapPorts(map: AddressMap | undefined, removed: Set<
   })) }
 }
 
-export function addressMapImpact(map: AddressMap | undefined, removed: Set<string>, ports: BlockPort[]): string[] {
+export function addressMapImpact(map: AddressMap | undefined, removed: Set<string>, ports: BlockPort[], interfaceName = 'axi'): string[] {
   if (!map) return []
   if ('entries' in map) {
-    const slaves = ports.filter((port) => port.type === 'axi.slave')
+    const slaves = busPorts(ports, { interface: interfaceName }).slaves
     return slaves.flatMap((slave) => map.entries
       .filter((entry) => (removed.has(slave.id) || removed.has(entry.portId)) && (entry.baseAddress !== null || entry.size !== null))
       .map((entry) => `${slave.id} / ${entry.portId}`))
@@ -156,8 +158,9 @@ export function planPortChange(nodeId: string, data: BlockData, edges: Edge[], c
   const disconnected = edges.filter((edge) =>
     (edge.source === nodeId && !!edge.sourceHandle && removed.has(edge.sourceHandle)) ||
     (edge.target === nodeId && !!edge.targetHandle && removed.has(edge.targetHandle)))
-  const mappings = addressMapImpact(data.addressMap, removed, data.ports)
-  const addressMap = removeAddressMapPorts(data.addressMap, removed, data.ports)
+  const interfaceName = getBus(data)?.interface
+  const mappings = addressMapImpact(data.addressMap, removed, data.ports, interfaceName)
+  const addressMap = removeAddressMapPorts(data.addressMap, removed, data.ports, interfaceName)
   return {
     removed, disconnected, mappings,
     data: { ...data, ports, config: { ...data.config, ports: completePortConfig(data.portDefinitions, counts, enabled) }, ...(addressMap ? { addressMap } : {}) },

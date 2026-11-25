@@ -66,12 +66,17 @@ export interface BlockConfig {
   ports?: PortConfig
 }
 
+export interface BusDefinition {
+  interface: string
+}
+
 export interface BlockTemplate {
   kind: string
   label: string
   ports: BlockPort[]
   parameters?: Record<string, ParameterSetting>
   defines?: Record<string, DefineValue>
+  bus?: BusDefinition
 }
 
 export interface BlockData extends Record<string, unknown> {
@@ -84,6 +89,7 @@ export interface BlockData extends Record<string, unknown> {
   portEnabled?: Record<string, boolean>
   parameters: Record<string, ParameterValue>
   defines?: Record<string, DefineValue>
+  bus?: BusDefinition
   addressMap?: AddressMap
 }
 

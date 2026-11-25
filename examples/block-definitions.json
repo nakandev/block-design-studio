@@ -34,6 +34,7 @@
     {
       "kind": "AHB Interconnect",
       "label": "ahb_interconnect",
+      "bus": { "interface": "ahb" },
       "ports": [
         { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
         { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
@@ -92,6 +93,7 @@
     {
       "kind": "AXI Interconnect",
       "label": "axi_interconnect",
+      "bus": { "interface": "axi" },
       "ports": [
         { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
         { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },
