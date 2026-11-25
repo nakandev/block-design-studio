@@ -4,6 +4,8 @@
 - `reset`: reset ports connect only to reset ports and do not compare width.
 - `axi.master` and `axi.slave`: continue to require master-to-slave connections.
 
+Clock and reset block ports can use either `input` or `output` direction. The External Ports palette also offers Clock Input, Clock Output, Reset Input, and Reset Output. External inputs supply signals to the design; external outputs receive signals from it. Connections run from output to input, allow fan-out, and accept only one connection per input.
+
 Example:
 
 ```json
