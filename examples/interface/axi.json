@@ -1,5 +1,30 @@
 {
   "version": "0.1.0",
   "name": "axi",
-  "label": "AXI"
+  "label": "AXI",
+  "parameters": {
+    "ADDR_WIDTH": { "type": "int", "value": "32" },
+    "DATA_WIDTH": { "type": "int", "value": "32" }
+  },
+  "signals": [
+    { "name": "AWADDR", "direction": "output", "width": "ADDR_WIDTH" },
+    { "name": "AWPROT", "direction": "output", "width": 3 },
+    { "name": "AWVALID", "direction": "output", "width": 1 },
+    { "name": "AWREADY", "direction": "input", "width": 1 },
+    { "name": "WDATA", "direction": "output", "width": "DATA_WIDTH" },
+    { "name": "WSTRB", "direction": "output", "width": "DATA_WIDTH / 8" },
+    { "name": "WVALID", "direction": "output", "width": 1 },
+    { "name": "WREADY", "direction": "input", "width": 1 },
+    { "name": "BRESP", "direction": "input", "width": 2 },
+    { "name": "BVALID", "direction": "input", "width": 1 },
+    { "name": "BREADY", "direction": "output", "width": 1 },
+    { "name": "ARADDR", "direction": "output", "width": "ADDR_WIDTH" },
+    { "name": "ARPROT", "direction": "output", "width": 3 },
+    { "name": "ARVALID", "direction": "output", "width": 1 },
+    { "name": "ARREADY", "direction": "input", "width": 1 },
+    { "name": "RDATA", "direction": "input", "width": "DATA_WIDTH" },
+    { "name": "RRESP", "direction": "input", "width": 2 },
+    { "name": "RVALID", "direction": "input", "width": 1 },
+    { "name": "RREADY", "direction": "output", "width": 1 }
+  ]
 }

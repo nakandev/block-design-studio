@@ -1,5 +1,28 @@
 {
   "version": "0.1.0",
   "name": "ahb",
-  "label": "AHB"
+  "label": "AHB",
+  "parameters": {
+    "DATA_WIDTH": { "type": "int", "value": "32" }
+  },
+  "signals": [
+    { "name": "HADDR", "direction": "output", "width": 32 },
+    { "name": "HTRANS", "direction": "output", "width": 2 },
+    { "name": "HWRITE", "direction": "output", "width": 1 },
+    { "name": "HSIZE", "direction": "output", "width": 3 },
+    { "name": "HBURST", "direction": "output", "width": 3 },
+    { "name": "HPROT", "direction": "output", "width": 4 },
+    { "name": "HMASTLOCK", "direction": "output", "width": 1 },
+    { "name": "HWDATA", "direction": "output", "width": "DATA_WIDTH" },
+    { "name": "HRDATA", "direction": "input", "width": "DATA_WIDTH" },
+    { "name": "HRESP", "direction": "input", "width": 1 }
+  ],
+  "masterSignals": [
+    { "name": "HREADY", "direction": "input", "width": 1 }
+  ],
+  "slaveSignals": [
+    { "name": "HSEL", "direction": "input", "width": 1 },
+    { "name": "HREADY", "direction": "input", "width": 1 },
+    { "name": "HREADYOUT", "direction": "output", "width": 1 }
+  ]
 }

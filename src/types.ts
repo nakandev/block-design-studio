@@ -22,6 +22,16 @@ export interface InterfaceDefinition {
   name: string
   label: string
   source?: DefinitionSource
+  parameters?: Record<string, ParameterSetting>
+  signals?: InterfaceSignal[]
+  masterSignals?: InterfaceSignal[]
+  slaveSignals?: InterfaceSignal[]
+}
+
+export interface InterfaceSignal {
+  name: string
+  direction: PortDirection
+  width: number | string
 }
 
 export interface DefinitionSource {

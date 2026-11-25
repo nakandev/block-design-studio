@@ -6,6 +6,27 @@ Use **Load definitions** for a single JSON file in the existing inline format. F
 
 The manifest lists `interfaces` and `blocks` as `{ "path": "interface/ahb.json", "version": "0.1.0" }` references. Paths are relative to the manifest's folder. Each referenced JSON file contains one definition and its `version`; the versions must match exactly. Missing files, invalid definitions, and version mismatches prevent the entire load.
 
+### Interface signals
+
+Interfaces can optionally define `parameters`, `signals`, `masterSignals`, and `slaveSignals`; definitions without them remain supported. Each signal has a unique HDL identifier `name`, an `input` or `output` direction, and a `width` (a positive integer or a nonempty HDL expression string). Parameters use the same `{ "type": "int", "value": "32" }` format as block parameters. Expressions and parameter values are stored as written, not evaluated or checked against a specific HDL.
+
+The `signals` directions are relative to the master; the slave uses the opposite direction. `masterSignals` and `slaveSignals` are role-specific and use the specified direction directly. Names must not repeat within a list or between common and role-specific signals for the same role. A name can occur in both role-specific lists.
+
+```json
+{
+  "name": "example",
+  "parameters": { "DATA_WIDTH": { "type": "int", "value": "32" } },
+  "signals": [
+    { "name": "DATA", "direction": "output", "width": "DATA_WIDTH" }
+  ],
+  "slaveSignals": [
+    { "name": "SELECT", "direction": "input", "width": 1 }
+  ]
+}
+```
+
+The example `ahb` and `axi` interfaces describe AHB-Lite and AXI4-Lite respectively. In AHB-Lite, `HREADY` is an input on both roles, while `HSEL` and `HREADYOUT` are slave-specific; their interconnect routing is not represented by simple signal reversal. Clock and reset remain separate block ports. These definitions describe signals only: they do not validate parameter ranges, check interface compatibility, or generate RTL.
+
 Exported and browser-saved designs include an `interfaceSource` with `path` and `version` on each interface port and generated port definition. Generated ports inherit their definition's source. Paths are relative to the loaded manifest's folder; unknown sources have `null` path and version. Older designs with per-node `interfaceSources` are migrated to per-port sources when opened or saved.
 
 For example, an interface port can include `"interfaceSource": { "path": "interface/ahb.json", "version": "0.1.0" }`. Individual generated-port sources are retained when ports are disabled or their count is reduced and later restored.

@@ -3,11 +3,12 @@ import { after, before, test } from 'node:test'
 import { createServer } from 'vite'
 import { readFile } from 'node:fs/promises'
 
-let server, loadDefinitionFolder, validateDefinitions
+let server, loadDefinitionFolder, validateDefinitions, interfaceSignals
 before(async () => {
   server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
   ;({ loadDefinitionFolder } = await server.ssrLoadModule('/src/definitionManifest.ts'))
   ;({ validateDefinitions } = await server.ssrLoadModule('/src/App.tsx'))
+  ;({ interfaceSignals } = await server.ssrLoadModule('/src/interfaceSignals.ts'))
 })
 after(async () => { await server?.close() })
 
@@ -47,7 +48,40 @@ test('all example references resolve and preserve the AXI GPIO settings', async 
   const parsed = validateDefinitions(await loadDefinitionFolder(entries))
   assert.equal(parsed.interfaces.length, 11)
   assert.equal(parsed.blocks.length, 13)
+  const ahb = parsed.interfaces.find((entry) => entry.name === 'ahb')
+  const axi = parsed.interfaces.find((entry) => entry.name === 'axi')
+  const get = (definition, side, name) => interfaceSignals(definition, side).find((signal) => signal.name === name)
+  assert.deepEqual(get(ahb, 'master', 'HADDR'), { name: 'HADDR', direction: 'output', width: 32 })
+  assert.deepEqual(get(ahb, 'slave', 'HADDR'), { name: 'HADDR', direction: 'input', width: 32 })
+  assert.equal(get(ahb, 'master', 'HREADY').direction, 'input')
+  assert.equal(get(ahb, 'slave', 'HREADY').direction, 'input')
+  assert.equal(get(ahb, 'slave', 'HREADYOUT').direction, 'output')
+  assert.equal(get(ahb, 'slave', 'HSEL').direction, 'input')
+  assert.equal(get(ahb, 'master', 'HSEL'), undefined)
+  assert.deepEqual(get(axi, 'master', 'WSTRB'), { name: 'WSTRB', direction: 'output', width: 'DATA_WIDTH / 8' })
+  assert.equal(get(axi, 'slave', 'WSTRB').direction, 'input')
+  assert.equal(get(axi, 'slave', 'RVALID').direction, 'output')
+  assert.equal(axi.parameters.DATA_WIDTH.value, '32')
+  assert.equal(interfaceSignals(axi, 'master').length, 19)
   const gpio = parsed.blocks.find((block) => block.kind === 'AXI_GPIO')
   assert.deepEqual(gpio.parameters, { WIDTH: { type: 'int', value: '32' } })
   assert.deepEqual(gpio.defines, { DEBUG: { enabled: true, value: '1' } })
+})
+
+test('validates signal lists and retains legacy interfaces', () => {
+  const parse = (item) => validateDefinitions({ interfaces: [{ name: 'test', ...item }], blocks: [] }).interfaces[0]
+  assert.deepEqual(parse({}), { name: 'test', label: 'TEST' })
+  const signal = { name: 'DATA', direction: 'output', width: 'WIDTH + 1' }
+  assert.deepEqual(parse({ signals: [signal] }).signals, [signal])
+  for (const invalid of [
+    { ...signal, width: 0 }, { ...signal, width: 1.5 }, { ...signal, width: ' ' },
+    { ...signal, direction: 'inout' }, { ...signal, name: 'not valid' }, null,
+  ]) {
+    assert.throws(() => parse({ signals: [invalid] }), /Invalid signals signal/)
+  }
+  assert.throws(() => parse({ signals: {} }), /expected an array/)
+  assert.throws(() => parse({ parameters: { WIDTH: { type: '', value: '32' } } }), /Invalid parameter/)
+  assert.throws(() => parse({ signals: [signal, signal] }), /Duplicate signal/)
+  assert.throws(() => parse({ signals: [signal], slaveSignals: [signal] }), /Duplicate signal/)
+  assert.doesNotThrow(() => parse({ masterSignals: [signal], slaveSignals: [signal] }))
 })

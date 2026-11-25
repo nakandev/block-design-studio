@@ -17,6 +17,7 @@ import OrthogonalEdge from './OrthogonalEdge'
 import { mergeBlockSettings, validateBlockSettings } from './blockSettings'
 import { busPorts, createAddressMap, getBus, validateBus } from './bus'
 import { loadDefinitionFolder, type DefinitionSources } from './definitionManifest'
+import { validateInterfaceSignals } from './interfaceSignals'
 import { canMergeDefinition, captureInterfaceSources, designDefinitions, migrateInterfaceSources, usedInterfaces, withInterfaceSources } from './designDefinitions'
 import { adoptPortDefinitions, expandDefinition, generatedPorts, initialPortConfiguration, migratePortConfiguration, planPortChange, validateGenerate, validatePortIds } from './generatedPorts'
 import type { AddressMap, BlockPort, BlockTemplate, DefineValue, DesignDocument, InterfacePortType, InterfaceDefinition, ParameterValue } from './types'
@@ -76,7 +77,7 @@ export function validateDefinitions(value: unknown, sources?: DefinitionSources)
     if (typeof item.name !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(item.name)) throw new Error(`Interface ${index + 1} needs a valid name`)
     if (names.has(item.name)) throw new Error(`Duplicate interface name: ${item.name}`)
     names.add(item.name)
-    return { name: item.name, label: typeof item.label === 'string' && item.label.trim() ? item.label.trim() : item.name.toUpperCase(), ...(sources?.interfaces[index] ? { source: sources.interfaces[index] } : {}) }
+    return { name: item.name, label: typeof item.label === 'string' && item.label.trim() ? item.label.trim() : item.name.toUpperCase(), ...validateInterfaceSignals(item, item.name), ...(sources?.interfaces[index] ? { source: sources.interfaces[index] } : {}) }
   })
   if (!interfaces.length) throw new Error('At least one interface must be defined')
   const kinds = new Set<string>()
