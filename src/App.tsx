@@ -16,7 +16,8 @@ import GeneratedPortsEditor from './GeneratedPortsEditor'
 import OrthogonalEdge from './OrthogonalEdge'
 import { mergeBlockSettings, validateBlockSettings } from './blockSettings'
 import { busPorts, createAddressMap, getBus, validateBus } from './bus'
-import { loadDefinitionFolder } from './definitionManifest'
+import { loadDefinitionFolder, type DefinitionSources } from './definitionManifest'
+import { canMergeDefinition, captureInterfaceSources, designDefinitions, usedInterfaces } from './designDefinitions'
 import { adoptPortDefinitions, expandDefinition, generatedPorts, initialPortConfiguration, migratePortConfiguration, planPortChange, validateGenerate, validatePortIds } from './generatedPorts'
 import type { AddressMap, BlockPort, BlockTemplate, DefineValue, DesignDocument, InterfacePortType, InterfaceDefinition, ParameterValue } from './types'
 
@@ -60,7 +61,7 @@ function edgeTypeKey(edge: Edge, nodesById: Map<string, BlockNode>): string {
   return interfaceName ? `interface:${interfaceName}` : port.type
 }
 
-export function validateDefinitions(value: unknown): DefinitionSet {
+export function validateDefinitions(value: unknown, sources?: DefinitionSources): DefinitionSet {
   const document = Array.isArray(value) ? { interfaces: defaultInterfaces, blocks: value } : value
   if (!document || typeof document !== 'object') throw new Error('Definitions must be an object containing interfaces and blocks')
   const raw = document as Record<string, unknown>
@@ -75,7 +76,7 @@ export function validateDefinitions(value: unknown): DefinitionSet {
     if (typeof item.name !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(item.name)) throw new Error(`Interface ${index + 1} needs a valid name`)
     if (names.has(item.name)) throw new Error(`Duplicate interface name: ${item.name}`)
     names.add(item.name)
-    return { name: item.name, label: typeof item.label === 'string' && item.label.trim() ? item.label.trim() : item.name.toUpperCase() }
+    return { name: item.name, label: typeof item.label === 'string' && item.label.trim() ? item.label.trim() : item.name.toUpperCase(), ...(sources?.interfaces[index] ? { source: sources.interfaces[index] } : {}) }
   })
   if (!interfaces.length) throw new Error('At least one interface must be defined')
   const kinds = new Set<string>()
@@ -111,7 +112,7 @@ export function validateDefinitions(value: unknown): DefinitionSet {
     })
     validatePortIds(ports)
     const bus = validateBus(template.bus, names, template.kind)
-    return { kind: template.kind, label: template.label, ports, ...validateBlockSettings(template, template.kind), ...(bus ? { bus } : {}) }
+    return { kind: template.kind, label: template.label, ports, ...validateBlockSettings(template, template.kind), ...(bus ? { bus } : {}), ...(sources?.blocks[templateIndex] ? { source: sources.blocks[templateIndex] } : {}) }
   })
   return { interfaces, blocks }
 }
@@ -270,7 +271,8 @@ export default function App() {
     const ports = config ? generatedPorts(config.portDefinitions, config.config.ports.counts, config.config.ports.enabled) : template.ports.map((port) => ({ ...port }))
     const bus = template.bus ?? (template.kind === 'AXI Interconnect' ? { interface: 'axi' } : undefined)
     const addressMap = bus ? createAddressMap(ports, bus) : undefined
-    const data = mergeBlockSettings({ label: template.label, kind: template.kind, ports, parameters: {}, ...config, ...(bus ? { bus: { ...bus } } : {}), ...(addressMap ? { addressMap } : {}) }, template)
+    const interfaceSources = captureInterfaceSources(usedInterfaces(template.ports, bus), interfaces)
+    const data = mergeBlockSettings({ label: template.label, kind: template.kind, ports, parameters: {}, ...config, interfaceSources, ...(template.source ? { definitionSource: { ...template.source } } : {}), ...(bus ? { bus: { ...bus } } : {}), ...(addressMap ? { addressMap } : {}) }, template)
     const newNode: BlockNode = { id, type: 'block', position: { x: 260 + nodesRef.current.length * 24, y: 120 + nodesRef.current.length * 24 }, data }
     replace([...nodesRef.current, newNode], edgesRef.current)
     record(before); setSelectedId(id); setStatus(`${template.label} added`)
@@ -292,7 +294,8 @@ export default function App() {
     const count = nodesRef.current.filter((node) => node.type === nodeType).length
     const id = `${nodeType}_${Date.now()}_${count}`
     const display = isInterface ? `${definition.label} ${side}` : isAxi || isI2c ? kind : isSignal ? `${kind[0].toUpperCase()}${kind.slice(1)} ${signalDirection === 'input' ? 'Input' : 'Output'}` : `External ${kind[0].toUpperCase()}${kind.slice(1)}`
-    const newNode: BlockNode = { id, type: nodeType, position: { x: interfaceType.endsWith('.master') || (isSignal && signalDirection === 'output') ? 560 : 40, y: 140 + count * 64 }, data: { label, kind: `External ${display}`, ports: [port], parameters: {} } }
+    const interfaceSources = captureInterfaceSources(usedInterfaces([port]), interfaces)
+    const newNode: BlockNode = { id, type: nodeType, position: { x: interfaceType.endsWith('.master') || (isSignal && signalDirection === 'output') ? 560 : 40, y: 140 + count * 64 }, data: { label, kind: `External ${display}`, ports: [port], parameters: {}, interfaceSources } }
     replace([...nodesRef.current, newNode], edgesRef.current)
     record(before); setSelectedId(id); setStatus(`${newNode.data.kind} added`)
   }
@@ -363,6 +366,7 @@ export default function App() {
     return currentNodes.map((node) => {
       const template = node.type === 'block' ? byKind.get(node.data.kind) : undefined
       if (!template) return node
+      if (!canMergeDefinition(node.data.definitionSource, template.source)) return node
       const currentBus = getBus(node.data)
       const dataWithBus = !currentBus && template.bus ? { ...node.data, bus: { ...template.bus } } : node.data
       const data = adoptPortDefinitions(mergeBlockSettings(dataWithBus, template), template.ports)
@@ -372,11 +376,18 @@ export default function App() {
   const migrationWarning = (currentNodes: BlockNode[], definitions: BlockTemplate[]) => {
     const kinds = new Set(definitions.filter((template) => template.ports.some((port) => port.generate)).map((template) => template.kind))
     const count = currentNodes.filter((node) => node.type === 'block' && !node.data.portDefinitions && kinds.has(node.data.kind)).length
-    return count ? `; ${count} existing block(s) retain fixed ports because their ports do not match the definition` : ''
+    const byKind = new Map(definitions.map((template) => [template.kind, template]))
+    const conflicts = currentNodes.filter((node) => {
+      const source = node.data.definitionSource
+      const template = node.type === 'block' ? byKind.get(node.data.kind) : undefined
+      return source && template && !canMergeDefinition(source, template.source)
+    }).length
+    return `${count ? `; ${count} existing block(s) retain fixed ports because their ports do not match the definition` : ''}${conflicts ? `; ${conflicts} block(s) retain their original definition because the loaded source differs` : ''}`
   }
-  const loadDefinitions = async (read: () => Promise<unknown>) => {
+  const loadDefinitions = async (read: () => Promise<{ value: unknown; sources?: DefinitionSources }>) => {
     try {
-      const parsed = validateDefinitions(await read())
+      const { value, sources } = await read()
+      const parsed = validateDefinitions(value, sources)
       const before = snapshot()
       const next = mergeDefinitions(nodesRef.current, parsed.blocks)
       if (next.some((node, index) => node !== nodesRef.current[index])) { replace(next, edgesRef.current); record(before) }
@@ -388,12 +399,13 @@ export default function App() {
     try { const document = JSON.parse(await file.text()) as DesignDocument; if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format'); const restored = (document.nodes as BlockNode[]).map((node) => ({ ...node, data: migratePortConfiguration(node.data) })); const next = mergeDefinitions(restored, templates); replace(next, document.edges as Edge[]); setDesignName(document.name || 'untitled'); setSelectedId(null); setStatus(`Design opened${migrationWarning(next, templates)}`) }
     catch (error) { setStatus(error instanceof Error ? error.message : 'Could not open design') }
   }
-  const saveDesign = () => { localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current })); setStatus('Saved in browser storage') }
-  const exportDesign = () => { const blob = new Blob([JSON.stringify({ version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${designName || 'block-design'}.json`; anchor.click(); URL.revokeObjectURL(url) }
+  const designDocument = () => ({ version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current, definitions: designDefinitions(nodesRef.current) })
+  const saveDesign = () => { localStorage.setItem(STORAGE_KEY, JSON.stringify(designDocument())); setStatus('Saved in browser storage') }
+  const exportDesign = () => { const blob = new Blob([JSON.stringify(designDocument(), null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${designName || 'block-design'}.json`; anchor.click(); URL.revokeObjectURL(url) }
 
   const addressMapNode = nodes.find((node) => node.id === addressMapNodeId)
   return <main className="app-shell">
-    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFileRef.current?.click()}>Load definitions</button><input ref={definitionsFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadDefinitions(async () => JSON.parse(await file.text())); event.target.value = '' }} /><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(() => loadDefinitionFolder(files)); event.target.value = '' }} /><button onClick={saveDesign}>Save</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFileRef.current?.click()}>Load definitions</button><input ref={definitionsFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadDefinitions(async () => ({ value: JSON.parse(await file.text()) })); event.target.value = '' }} /><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(async () => { const value = await loadDefinitionFolder(files); return { value, sources: value.sources } }); event.target.value = '' }} /><button onClick={saveDesign}>Save</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
     <div className="workspace">
       <aside className="sidebar panel">
         <details className="wire-filter" open>

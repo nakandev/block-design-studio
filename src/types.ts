@@ -20,6 +20,12 @@ export interface BlockPort {
 export interface InterfaceDefinition {
   name: string
   label: string
+  source?: DefinitionSource
+}
+
+export interface DefinitionSource {
+  path: string
+  version: string
 }
 
 export interface AddressMapEntry {
@@ -77,6 +83,7 @@ export interface BlockTemplate {
   parameters?: Record<string, ParameterSetting>
   defines?: Record<string, DefineValue>
   bus?: BusDefinition
+  source?: DefinitionSource
 }
 
 export interface BlockData extends Record<string, unknown> {
@@ -91,6 +98,13 @@ export interface BlockData extends Record<string, unknown> {
   defines?: Record<string, DefineValue>
   bus?: BusDefinition
   addressMap?: AddressMap
+  definitionSource?: DefinitionSource
+  interfaceSources?: Record<string, DefinitionSource>
+}
+
+export interface DesignDefinitions {
+  interfaces: { name: string; path: string | null; version: string | null }[]
+  blocks: { kind: string; path: string | null; version: string | null }[]
 }
 
 export interface DesignDocument {
@@ -98,4 +112,5 @@ export interface DesignDocument {
   name: string
   nodes: unknown[]
   edges: unknown[]
+  definitions?: DesignDefinitions
 }

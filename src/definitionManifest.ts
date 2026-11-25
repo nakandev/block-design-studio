@@ -3,9 +3,14 @@ interface DefinitionFile {
   text(): Promise<string>
 }
 
-interface Reference {
+export interface Reference {
   path: string
   version: string
+}
+
+export interface DefinitionSources {
+  interfaces: Reference[]
+  blocks: Reference[]
 }
 
 function references(value: unknown, category: string): Reference[] {
@@ -22,7 +27,7 @@ function references(value: unknown, category: string): Reference[] {
   })
 }
 
-export async function loadDefinitionFolder(files: Iterable<DefinitionFile>): Promise<unknown> {
+export async function loadDefinitionFolder(files: Iterable<DefinitionFile>) {
   const all = Array.from(files)
   const manifests = all.filter((file) => /^[^/]+\/block-definitions\.json$/.test(file.webkitRelativePath))
   if (manifests.length !== 1) throw new Error('Select a folder containing block-definitions.json at its root')
@@ -52,5 +57,5 @@ export async function loadDefinitionFolder(files: Iterable<DefinitionFile>): Pro
     if ((value as Record<string, unknown>).version !== ref.version) throw new Error(`Version mismatch in ${ref.path}: expected ${ref.version}`)
     return value
   }
-  return { interfaces: await Promise.all(interfaces.map(load)), blocks: await Promise.all(blocks.map(load)) }
+  return { interfaces: await Promise.all(interfaces.map(load)), blocks: await Promise.all(blocks.map(load)), sources: { interfaces, blocks } }
 }

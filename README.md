@@ -6,6 +6,8 @@ Use **Load definitions** for a single JSON file in the existing inline format. F
 
 The manifest lists `interfaces` and `blocks` as `{ "path": "interface/ahb.json", "version": "0.1.0" }` references. Paths are relative to the manifest's folder. Each referenced JSON file contains one definition and its `version`; the versions must match exactly. Missing files, invalid definitions, and version mismatches prevent the entire load.
 
+Exported and browser-saved designs include `definitions.interfaces` and `definitions.blocks` with the names or kinds, paths, and versions of definitions used by nodes. Paths are relative to the loaded manifest's folder. Definitions without known provenance, including built-ins and older designs, have `null` path and version. Per-node provenance is saved so different versions remain distinct after reopening; definition files are not included or automatically loaded. Existing blocks with a known source are not updated from a different definition path or version.
+
 ## Ports
 
 - `clock`: clock ports connect only to clock ports and do not compare width.
