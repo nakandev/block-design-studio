@@ -17,7 +17,7 @@ import OrthogonalEdge from './OrthogonalEdge'
 import { mergeBlockSettings, validateBlockSettings } from './blockSettings'
 import { busPorts, createAddressMap, getBus, validateBus } from './bus'
 import { loadDefinitionFolder, type DefinitionSources } from './definitionManifest'
-import { canMergeDefinition, captureInterfaceSources, designDefinitions, usedInterfaces } from './designDefinitions'
+import { canMergeDefinition, captureInterfaceSources, designDefinitions, migrateInterfaceSources, usedInterfaces, withInterfaceSources } from './designDefinitions'
 import { adoptPortDefinitions, expandDefinition, generatedPorts, initialPortConfiguration, migratePortConfiguration, planPortChange, validateGenerate, validatePortIds } from './generatedPorts'
 import type { AddressMap, BlockPort, BlockTemplate, DefineValue, DesignDocument, InterfacePortType, InterfaceDefinition, ParameterValue } from './types'
 
@@ -267,11 +267,12 @@ export default function App() {
   const addBlock = (template: BlockTemplate) => {
     const before = snapshot()
     const id = `${template.kind.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`
-    const config = template.ports.some((port) => port.generate) ? initialPortConfiguration(template.ports) : undefined
-    const ports = config ? generatedPorts(config.portDefinitions, config.config.ports.counts, config.config.ports.enabled) : template.ports.map((port) => ({ ...port }))
     const bus = template.bus ?? (template.kind === 'AXI Interconnect' ? { interface: 'axi' } : undefined)
-    const addressMap = bus ? createAddressMap(ports, bus) : undefined
     const interfaceSources = captureInterfaceSources(usedInterfaces(template.ports, bus), interfaces)
+    const portDefinitions = withInterfaceSources(template.ports, interfaceSources)
+    const config = portDefinitions.some((port) => port.generate) ? initialPortConfiguration(portDefinitions) : undefined
+    const ports = config ? generatedPorts(config.portDefinitions, config.config.ports.counts, config.config.ports.enabled) : portDefinitions.map((port) => ({ ...port }))
+    const addressMap = bus ? createAddressMap(ports, bus) : undefined
     const data = mergeBlockSettings({ label: template.label, kind: template.kind, ports, parameters: {}, ...config, interfaceSources, ...(template.source ? { definitionSource: { ...template.source } } : {}), ...(bus ? { bus: { ...bus } } : {}), ...(addressMap ? { addressMap } : {}) }, template)
     const newNode: BlockNode = { id, type: 'block', position: { x: 260 + nodesRef.current.length * 24, y: 120 + nodesRef.current.length * 24 }, data }
     replace([...nodesRef.current, newNode], edgesRef.current)
@@ -295,7 +296,7 @@ export default function App() {
     const id = `${nodeType}_${Date.now()}_${count}`
     const display = isInterface ? `${definition.label} ${side}` : isAxi || isI2c ? kind : isSignal ? `${kind[0].toUpperCase()}${kind.slice(1)} ${signalDirection === 'input' ? 'Input' : 'Output'}` : `External ${kind[0].toUpperCase()}${kind.slice(1)}`
     const interfaceSources = captureInterfaceSources(usedInterfaces([port]), interfaces)
-    const newNode: BlockNode = { id, type: nodeType, position: { x: interfaceType.endsWith('.master') || (isSignal && signalDirection === 'output') ? 560 : 40, y: 140 + count * 64 }, data: { label, kind: `External ${display}`, ports: [port], parameters: {}, interfaceSources } }
+    const newNode: BlockNode = { id, type: nodeType, position: { x: interfaceType.endsWith('.master') || (isSignal && signalDirection === 'output') ? 560 : 40, y: 140 + count * 64 }, data: { label, kind: `External ${display}`, ports: withInterfaceSources([port], interfaceSources), parameters: {}, interfaceSources } }
     replace([...nodesRef.current, newNode], edgesRef.current)
     record(before); setSelectedId(id); setStatus(`${newNode.data.kind} added`)
   }
@@ -396,10 +397,13 @@ export default function App() {
     catch (error) { setStatus(error instanceof Error ? `Definition error: ${error.message}` : 'Could not load definitions') }
   }
   const openDesign = async (file: File) => {
-    try { const document = JSON.parse(await file.text()) as DesignDocument; if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format'); const restored = (document.nodes as BlockNode[]).map((node) => ({ ...node, data: migratePortConfiguration(node.data) })); const next = mergeDefinitions(restored, templates); replace(next, document.edges as Edge[]); setDesignName(document.name || 'untitled'); setSelectedId(null); setStatus(`Design opened${migrationWarning(next, templates)}`) }
+    try { const document = JSON.parse(await file.text()) as DesignDocument; if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format'); const restored = (document.nodes as BlockNode[]).map((node) => ({ ...node, data: migrateInterfaceSources(migratePortConfiguration(node.data)) })); const next = mergeDefinitions(restored, templates); replace(next, document.edges as Edge[]); setDesignName(document.name || 'untitled'); setSelectedId(null); setStatus(`Design opened${migrationWarning(next, templates)}`) }
     catch (error) { setStatus(error instanceof Error ? error.message : 'Could not open design') }
   }
-  const designDocument = () => ({ version: 1, name: designName, nodes: nodesRef.current, edges: edgesRef.current, definitions: designDefinitions(nodesRef.current) })
+  const designDocument = () => {
+    const savedNodes = nodesRef.current.map((node) => ({ ...node, data: migrateInterfaceSources(node.data) }))
+    return { version: 1, name: designName, nodes: savedNodes, edges: edgesRef.current, definitions: designDefinitions(savedNodes) }
+  }
   const saveDesign = () => { localStorage.setItem(STORAGE_KEY, JSON.stringify(designDocument())); setStatus('Saved in browser storage') }
   const exportDesign = () => { const blob = new Blob([JSON.stringify(designDocument(), null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${designName || 'block-design'}.json`; anchor.click(); URL.revokeObjectURL(url) }
 

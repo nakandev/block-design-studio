@@ -1,6 +1,7 @@
 import type { Edge } from '@xyflow/react'
 import type { AddressMap, BlockData, BlockPort, PortConfig, PortGenerate } from './types'
 import { busPorts, getBus } from './bus'
+import { withInterfaceSources } from './designDefinitions'
 
 const has = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
 
@@ -120,7 +121,16 @@ export function adoptPortDefinitions(data: BlockData, definitions: BlockPort[]):
   if (expected.length !== data.ports.length || expected.some((port) => !data.ports.some((existing) =>
     existing.id === port.id && existing.name === port.name && existing.type === port.type &&
     existing.direction === port.direction && existing.width === port.width))) return data
-  return { ...data, portDefinitions: config.portDefinitions, config: { ...data.config, ports: settings } }
+  const existingPorts = withInterfaceSources(data.ports, data.interfaceSources)
+  const portDefinitions = withInterfaceSources(config.portDefinitions, data.interfaceSources).map((definition) => {
+    const matches = expandDefinition(definition, settings.counts[definition.id])
+      .map((port) => existingPorts.find((existing) => existing.id === port.id && existing.type === port.type))
+      .filter((port): port is BlockPort => !!port && !!port.interfaceSource)
+    if (!matches.length) return definition
+    const source = matches[0].interfaceSource!
+    return { ...definition, interfaceSource: matches.every((port) => port.interfaceSource?.path === source.path && port.interfaceSource?.version === source.version) ? { ...source } : { path: null, version: null } }
+  })
+  return { ...data, portDefinitions, config: { ...data.config, ports: settings } }
 }
 
 export function removeAddressMapPorts(map: AddressMap | undefined, removed: Set<string>, ports: BlockPort[], interfaceName = 'axi'): AddressMap | undefined {
@@ -153,7 +163,16 @@ export function addressMapImpact(map: AddressMap | undefined, removed: Set<strin
 
 export function planPortChange(nodeId: string, data: BlockData, edges: Edge[], counts: Record<string, number>, enabled: Record<string, boolean>, discarded: Set<string>) {
   if (!data.portDefinitions) throw new Error('Port definitions are missing')
-  const ports = generatedPorts(data.portDefinitions, counts, enabled)
+  const generatedPortSources = { ...data.generatedPortSources }
+  for (const port of withInterfaceSources(data.ports, data.interfaceSources)) {
+    if (port.interfaceSource && port.type && port.type !== 'clock' && port.type !== 'reset') {
+      generatedPortSources[port.id] = { type: port.type, source: port.interfaceSource }
+    }
+  }
+  const ports = generatedPorts(data.portDefinitions, counts, enabled).map((port) => {
+    const saved = generatedPortSources[port.id]
+    return saved && saved.type === port.type ? { ...port, interfaceSource: saved.source } : port
+  })
   const removed = new Set([...discarded, ...data.ports.filter((port) => !ports.some((next) => next.id === port.id)).map((port) => port.id)])
   const disconnected = edges.filter((edge) =>
     (edge.source === nodeId && !!edge.sourceHandle && removed.has(edge.sourceHandle)) ||
@@ -163,7 +182,7 @@ export function planPortChange(nodeId: string, data: BlockData, edges: Edge[], c
   const addressMap = removeAddressMapPorts(data.addressMap, removed, data.ports, interfaceName)
   return {
     removed, disconnected, mappings,
-    data: { ...data, ports, config: { ...data.config, ports: completePortConfig(data.portDefinitions, counts, enabled) }, ...(addressMap ? { addressMap } : {}) },
+    data: { ...data, ports, ...(Object.keys(generatedPortSources).length ? { generatedPortSources } : {}), config: { ...data.config, ports: completePortConfig(data.portDefinitions, counts, enabled) }, ...(addressMap ? { addressMap } : {}) },
     edges: edges.filter((edge) => !disconnected.includes(edge)),
   }
 }

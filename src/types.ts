@@ -15,6 +15,7 @@ export interface BlockPort {
   width?: number
   type?: BlockPortType
   generate?: PortGenerate
+  interfaceSource?: InterfaceSource
 }
 
 export interface InterfaceDefinition {
@@ -26,6 +27,11 @@ export interface InterfaceDefinition {
 export interface DefinitionSource {
   path: string
   version: string
+}
+
+export interface InterfaceSource {
+  path: string | null
+  version: string | null
 }
 
 export interface AddressMapEntry {
@@ -100,6 +106,7 @@ export interface BlockData extends Record<string, unknown> {
   addressMap?: AddressMap
   definitionSource?: DefinitionSource
   interfaceSources?: Record<string, DefinitionSource>
+  generatedPortSources?: Record<string, { type: InterfacePortType; source: InterfaceSource }>
 }
 
 export interface DesignDefinitions {

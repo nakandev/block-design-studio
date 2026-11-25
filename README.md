@@ -6,7 +6,11 @@ Use **Load definitions** for a single JSON file in the existing inline format. F
 
 The manifest lists `interfaces` and `blocks` as `{ "path": "interface/ahb.json", "version": "0.1.0" }` references. Paths are relative to the manifest's folder. Each referenced JSON file contains one definition and its `version`; the versions must match exactly. Missing files, invalid definitions, and version mismatches prevent the entire load.
 
-Exported and browser-saved designs include `definitions.interfaces` and `definitions.blocks` with the names or kinds, paths, and versions of definitions used by nodes. Paths are relative to the loaded manifest's folder. Definitions without known provenance, including built-ins and older designs, have `null` path and version. Per-node provenance is saved so different versions remain distinct after reopening; definition files are not included or automatically loaded. Existing blocks with a known source are not updated from a different definition path or version.
+Exported and browser-saved designs include an `interfaceSource` with `path` and `version` on each interface port and generated port definition. Generated ports inherit their definition's source. Paths are relative to the loaded manifest's folder; unknown sources have `null` path and version. Older designs with per-node `interfaceSources` are migrated to per-port sources when opened or saved.
+
+For example, an interface port can include `"interfaceSource": { "path": "interface/ahb.json", "version": "0.1.0" }`. Individual generated-port sources are retained when ports are disabled or their count is reduced and later restored.
+
+The design also includes `definitions.interfaces` and `definitions.blocks` listing the definitions used by nodes. Interface entries are collected from ports and generated port definitions; a bus without matching ports is included using its per-node source when available. Different versions remain distinct after reopening. Definition files are not included or automatically loaded. Existing blocks with a known source are not updated from a different definition path or version.
 
 ## Ports
 
