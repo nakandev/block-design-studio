@@ -3,12 +3,18 @@ export type InterfacePortType = `${string}.master` | `${string}.slave`
 export type SignalPortType = 'clock' | 'reset'
 export type BlockPortType = InterfacePortType | SignalPortType
 
+export interface PortGenerate {
+  for?: { index: string; count: number; min: number; max: number }
+  if?: { default: boolean }
+}
+
 export interface BlockPort {
   id: string
   name: string
   direction: PortDirection
   width?: number
   type?: BlockPortType
+  generate?: PortGenerate
 }
 
 export interface InterfaceDefinition {
@@ -63,6 +69,9 @@ export interface BlockData extends Record<string, unknown> {
   label: string
   kind: string
   ports: BlockPort[]
+  portDefinitions?: BlockPort[]
+  portCounts?: Record<string, number>
+  portEnabled?: Record<string, boolean>
   parameters: Record<string, ParameterValue>
   defines?: Record<string, DefineValue>
   addressMap?: AddressMap

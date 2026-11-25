@@ -1,0 +1,21 @@
+[
+  {
+    "kind": "AXI Interconnect",
+    "label": "AXI Interconnect",
+    "ports": [
+      { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
+      {
+        "id": "s{i}", "name": "s{i}", "direction": "output", "type": "axi.master",
+        "generate": { "for": { "index": "i", "count": 2, "min": 1, "max": 16 } }
+      },
+      {
+        "id": "m{i}", "name": "m{i}", "direction": "input", "type": "axi.slave",
+        "generate": { "for": { "index": "i", "count": 2, "min": 1, "max": 16 } }
+      },
+      {
+        "id": "debug", "name": "debug", "direction": "output", "width": 1,
+        "generate": { "if": { "default": false } }
+      }
+    ]
+  }
+]

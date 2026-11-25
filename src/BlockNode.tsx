@@ -1,4 +1,5 @@
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
+import { useEffect } from 'react'
+import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from '@xyflow/react'
 import type { BlockData, BlockPort } from './types'
 
 export type BlockNode = Node<BlockData, string>
@@ -25,7 +26,9 @@ function PortRow({ port, side }: { port: BlockPort; side: 'input' | 'output' }) 
   )
 }
 
-export default function BlockNodeView({ data, selected }: NodeProps<BlockNode>) {
+export default function BlockNodeView({ id, data, selected }: NodeProps<BlockNode>) {
+  const updateNodeInternals = useUpdateNodeInternals()
+  useEffect(() => { updateNodeInternals(id) }, [id, data.ports, updateNodeInternals])
   return (
     <div className={`block-node${selected ? ' selected' : ''}`}>
       <div className="block-node-header">
