@@ -60,6 +60,19 @@ class RTLGenerationTests(unittest.TestCase):
             {"kind": "Sink", "label": "Sink", "parameters": {"DATA_WIDTH": {"type": "int", "value": "8"}}},
         ]
 
+    def test_rejects_hierarchical_designs(self):
+        request = payload([], [])
+        request["design"]["subdesigns"] = [{"id": "child", "nodes": [], "edges": []}]
+        with self.assertRaisesRegex(GenerationError, "hierarchical designs"):
+            make_top(request)
+        request["design"]["subdesigns"] = []
+        request["design"]["nodes"] = [{"id": "child", "type": "subdesign"}]
+        with self.assertRaisesRegex(GenerationError, "hierarchical designs"):
+            generate_bundle(request)
+        request["design"]["subdesigns"] = {}
+        with self.assertRaisesRegex(GenerationError, "subdesigns must be an array"):
+            make_top(request)
+
     def test_builds_structural_top_with_flattened_interface_wires_and_parameters(self):
         source = block_node("source-1", "Source Block", [
             {"id": "din", "name": "din", "direction": "input", "width": 8},

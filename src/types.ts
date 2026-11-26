@@ -1,3 +1,5 @@
+import type { Subdesign } from './subdesign'
+
 export type PortDirection = 'input' | 'output'
 export type InterfacePortType = `${string}.master` | `${string}.slave`
 export type SignalPortType = 'clock' | 'reset'
@@ -106,6 +108,7 @@ export interface BlockData extends Record<string, unknown> {
   label: string
   kind: string
   ports: BlockPort[]
+  subdesignId?: string
   portLayout?: 'vertical' | 'horizontal'
   portDefinitions?: BlockPort[]
   config?: BlockConfig
@@ -131,4 +134,5 @@ export interface DesignDocument {
   nodes: unknown[]
   edges: unknown[]
   definitions?: DesignDefinitions
+  subdesigns?: Subdesign[]
 }

@@ -341,6 +341,11 @@ def make_top(payload: Any) -> tuple[str, dict[str, Any]]:
     design = payload.get("design")
     if not isinstance(design, dict) or not isinstance(design.get("nodes"), list) or not isinstance(design.get("edges"), list):
         raise GenerationError("design must contain nodes and edges arrays")
+    subdesigns = design.get("subdesigns", [])
+    if not isinstance(subdesigns, list):
+        raise GenerationError("design subdesigns must be an array")
+    if subdesigns or any(isinstance(node, dict) and node.get("type") == "subdesign" for node in design["nodes"]):
+        raise GenerationError("RTL generation for hierarchical designs is not supported")
     interfaces = load_interfaces(payload.get("interfaces"))
     blocks = load_blocks(payload.get("blocks"))
     nodes = design["nodes"]

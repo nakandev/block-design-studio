@@ -46,11 +46,42 @@ button { cursor: pointer; }
 .library-item small { color: #94a3b8; margin-top: 2px; }
 .library-icon { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border: 1px solid #dbe4ef; border-radius: 6px; background: #eef4ff; color: #2563eb; font-weight: 800; font-size: 10px; }
 .block-library-title { margin-top: 14px; }
-.canvas-panel { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #f7f9fc; }
-.canvas-panel > div { width: 100%; height: 100%; }
+.subdesign-library { flex: 0 1 auto; min-height: 0; max-height: 30%; overflow-y: auto; padding: 8px 10px; border-bottom: 1px solid #dbe2ea; }
+.subdesign-rtl-note { display: block; padding: 4px 8px; color: #64748b; font-size: 11px; }
+.subdesign-library-row { display: flex; align-items: center; }
+.subdesign-library-row > .library-item { min-width: 0; flex: 1; }
+.subdesign-library-row > button:not(.library-item) { flex: none; border: 0; padding: 4px; background: transparent; color: #64748b; }
+.subdesign-library-row > button:disabled { opacity: .4; cursor: not-allowed; }
+.subdesign-library .library-item:disabled { opacity: .45; cursor: not-allowed; }
+.canvas-panel { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #f7f9fc; }
+.canvas-flow { flex: 1; min-height: 0; width: 100%; }
+.design-tabs { display: flex; flex: none; overflow-x: auto; border-bottom: 1px solid #dbe2ea; background: #fff; }
+.design-tab { display: flex; flex: none; border-right: 1px solid #dbe2ea; }
+.design-tab.active { box-shadow: inset 0 -2px #2563eb; }
+.design-tab button { border: 0; background: transparent; padding: 8px 10px; color: #475569; white-space: nowrap; font-size: 12px; }
+.design-tab .close-tab { padding-left: 0; }
+:root[data-theme='dark'] .design-tabs { background: #111827; border-color: #273449; }
+:root[data-theme='dark'] .design-tab, :root[data-theme='dark'] .subdesign-library { border-color: #273449; }
+:root[data-theme='dark'] .design-tab button { color: #e5e7eb; }
 .canvas-panel .react-flow { width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .block-node { width: 196px; min-height: 96px; border: 1px solid #8ca0b8; border-radius: 7px; background: #fff; box-shadow: 0 3px 10px rgba(51,65,85,.10); font-size: 12px; }
 .block-node.selected { border: 2px solid #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+.subdesign-node { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.subdesign-node.expanded { padding: 6px; border: 1px solid #94a3b8; border-radius: 8px; background: #f8fafc; }
+.subdesign-toggle { border: 1px solid #94a3b8; border-radius: 4px; padding: 3px 6px; background: #fff; color: #334155; font-size: 11px; }
+.subdesign-preview { width: 360px; height: 220px; background: #fff; border: 1px solid #dbe2ea; border-radius: 4px; }
+.subdesign-preview-box { fill: #edf3fb; stroke: #8ca0b8; }
+.subdesign-preview-boundary { fill: #dbeafe; stroke: #2563eb; }
+.subdesign-preview-edge { stroke: #64748b; stroke-width: 2; }
+.subdesign-preview-port { fill: #2563eb; }
+.subdesign-preview-kind { font-size: 9px; fill: #64748b; }
+.subdesign-preview-label { font-size: 12px; fill: #1f2937; }
+.subdesign-empty { padding: 10px; color: #64748b; font-size: 12px; }
+:root[data-theme='dark'] .subdesign-node.expanded, :root[data-theme='dark'] .subdesign-preview { background: #0f172a; border-color: #475569; }
+:root[data-theme='dark'] .subdesign-toggle { background: #1f2937; color: #e5e7eb; border-color: #475569; }
+:root[data-theme='dark'] .subdesign-preview-box { fill: #273449; stroke: #64748b; }
+:root[data-theme='dark'] .subdesign-preview-boundary { fill: #1e3a5f; stroke: #60a5fa; }
+:root[data-theme='dark'] .subdesign-preview-label { fill: #e5e7eb; }
 .block-node-header { height: 42px; display: flex; flex-direction: column; justify-content: center; padding: 5px 10px; border-radius: 6px 6px 0 0; background: #edf3fb; border-bottom: 1px solid #dbe4ef; }
 .block-kind { color: #64748b; font-size: 9px; text-transform: uppercase; }
 .ports { position: relative; display: grid; grid-template-columns: 1fr 1fr; min-height: 54px; }

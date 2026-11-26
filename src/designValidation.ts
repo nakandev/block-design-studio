@@ -53,7 +53,7 @@ export function validateDesign(nodes: BlockNode[], edges: Edge[], templates?: Bl
   const reverseDrivers = new Set<string>()
   const portKey = (nodeId: string, portId: string | null | undefined) => JSON.stringify([nodeId, portId])
   for (const node of nodes) {
-    if (node.type !== 'block') continue
+    if (node.type !== 'block' && node.type !== 'subdesign') continue
     const label = node.data.label
     if (!label?.trim()) issues.push({ severity: 'error', message: `${node.id}: block name is empty`, nodeId: node.id })
     else {
@@ -62,7 +62,7 @@ export function validateDesign(nodes: BlockNode[], edges: Edge[], templates?: Bl
       if (previous) issues.push({ severity: 'warning', message: `${label}: generated instance name ${instance} collides with ${previous}`, nodeId: node.id })
       else names.set(instance, label)
     }
-    if (templates) {
+    if (templates && node.type === 'block') {
       const template = templatesByKind.get(node.data.kind)
       if (!template) issues.push({ severity: 'warning', message: `${label}: block definition ${node.data.kind} is not loaded`, nodeId: node.id })
       else if (!canMergeDefinition(node.data.definitionSource, template.source)) issues.push({ severity: 'warning', message: `${label}: loaded block definition source differs from the design`, nodeId: node.id })

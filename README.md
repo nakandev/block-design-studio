@@ -47,6 +47,14 @@ Run backend tests with `npm run test:backend`.
 
 Use **Export JSON** to save a design to a file and **Open** to restore it. Opening another file or leaving the page warns when the design has changed since the last export or open; browser unload warnings depend on browser support and interaction. If loading a design applies changes from currently loaded definitions, export again to save those changes.
 
+## Subdesigns
+
+Choose **New subdesign** to create a subdesign and add its first instance. Edit it in its own tab; double-click an instance or use the edit button in the Subdesigns list to reopen that tab. Closing a tab does not delete the design. Select a design in the list to add another instance; circular references are not allowed. An unused subdesign can be deleted from the list after all its instances have been removed.
+
+External Ports inside a subdesign automatically become ports on every parent instance. Renaming a port preserves its connections; deleting it or changing its width may make parent connections incompatible. The affected connections are listed for confirmation before removal. Undo and redo are maintained per design tab; restoring a removed parent connection is blocked if its endpoints are no longer available.
+
+Use **Expand** on an instance to see a read-only, one-level overview of its contents and connections. Matching numbered markers identify parent ports and their internal External Ports. Edit the contents in the subdesign tab. Export saves the top design and all subdesigns together in one JSON file, and Open also accepts older, non-hierarchical files. Validation covers every design. RTL generation is unavailable for projects containing subdesigns.
+
 Exported designs include an `interfaceSource` with `path` and `version` on each interface port and generated port definition. Generated ports inherit their definition's source. Paths are relative to the loaded manifest's folder; unknown sources have `null` path and version. Older designs with per-node `interfaceSources` are migrated to per-port sources when opened or exported.
 
 For example, an interface port can include `"interfaceSource": { "path": "interface/ahb.json", "version": "0.1.0" }`. Individual generated-port sources are retained when ports are disabled or their count is reduced and later restored.

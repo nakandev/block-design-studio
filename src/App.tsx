@@ -6,6 +6,7 @@ import {
   type OnSelectionChangeParams, type ReactFlowInstance,
 } from '@xyflow/react'
 import BlockNodeView, { type BlockNode } from './BlockNode'
+import SubdesignNodeView, { SubdesignViewContext } from './SubdesignNode'
 import ExternalInputNodeView from './ExternalInputNode'
 import ExternalOutputNodeView from './ExternalOutputNode'
 import ExternalAxiNodeView from './ExternalAxiNode'
@@ -19,10 +20,12 @@ import { busPorts, createAddressMap, getBus, validateBus } from './bus'
 import { loadDefinitionFolder, type DefinitionSources } from './definitionManifest'
 import { validateInterfaceSignals } from './interfaceSignals'
 import { canMergeDefinition, captureInterfaceSources, designDefinitions, migrateInterfaceSources, usedInterfaces, withInterfaceSources } from './designDefinitions'
-import { designFingerprint } from './designChanges'
+import { workspaceFingerprint } from './designChanges'
 import { connectionError, validateDesign, type ValidationIssue } from './designValidation'
 import { connectionFor, connectionCandidates, externalNodeFor, type PortRef } from './connectionTools'
 import { adoptPortDefinitions, expandDefinition, generatedPorts, initialPortConfiguration, migratePortConfiguration, planPortChange, validateGenerate, validatePortIds } from './generatedPorts'
+import { readSubdesigns, subdesignPorts, type ParentConnectionImpact } from './subdesign'
+import { ROOT_GRAPH, canInsertSubdesign, changeGraph, graphFor, restoreParentConnections, syncWorkspaceOnOpen, syncWorkspacePorts, type Workspace } from './workspace'
 import type { AddressMap, BlockPort, BlockTemplate, DefineValue, DesignDocument, InterfacePortType, InterfaceDefinition, ParameterValue } from './types'
 
 const THEME_STORAGE_KEY = 'block-design-studio-theme-v1'
@@ -39,6 +42,7 @@ const defaultTemplates: BlockTemplate[] = [
 
 const nodeTypes: NodeTypes = {
   block: BlockNodeView,
+  subdesign: SubdesignNodeView,
   externalInput: ExternalInputNodeView,
   externalOutput: ExternalOutputNodeView,
   externalInterfaceMaster: ExternalAxiNodeView,
@@ -51,8 +55,19 @@ const nodeTypes: NodeTypes = {
   externalReset: ExternalSignalNodeView,
 }
 const edgeTypes = { orthogonal: OrthogonalEdge }
-interface Snapshot { nodes: BlockNode[]; edges: Edge[] }
+interface Snapshot { nodes: BlockNode[]; edges: Edge[]; restore: ParentConnectionImpact[] }
+interface GraphHistory { past: Snapshot[]; future: Snapshot[] }
+type WorkspaceIssue = ValidationIssue & { graphId: string }
 interface DefinitionSet { interfaces: InterfaceDefinition[]; blocks: BlockTemplate[] }
+
+function newId(prefix: string, existing: Set<string>): string {
+  let id: string
+  do {
+    const suffix = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`
+    id = `${prefix}_${suffix}`
+  } while (existing.has(id))
+  return id
+}
 
 function edgeTypeKey(edge: Edge, nodesById: Map<string, BlockNode>): string {
   const source = nodesById.get(edge.source)?.data.ports.find((port) => port.id === edge.sourceHandle)
@@ -127,15 +142,21 @@ export default function App() {
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [templates, setTemplates] = useState(defaultTemplates)
   const [interfaces, setInterfaces] = useState(defaultInterfaces)
-  const [nodes, setNodes, onNodesChangeBase] = useNodesState<BlockNode>([{ id: 'input_1', type: 'block', position: { x: 80, y: 180 }, data: { label: 'Input', kind: 'Input', ports: defaultTemplates[0].ports, parameters: {} } }])
-  const [edges, setEdges, onEdgesChangeBase] = useEdgesState<Edge>([])
+  const [nodes, setNodes] = useNodesState<BlockNode>([{ id: 'input_1', type: 'block', position: { x: 80, y: 180 }, data: { label: 'Input', kind: 'Input', ports: defaultTemplates[0].ports, parameters: {} } }])
+  const [edges, setEdges] = useEdgesState<Edge>([])
+  const [workspace, setWorkspace] = useState<Workspace>(() => ({ root: { nodes, edges }, subdesigns: [] }))
+  const workspaceRef = useRef(workspace)
+  const [activeGraph, setActiveGraph] = useState(ROOT_GRAPH)
+  const activeGraphRef = useRef(ROOT_GRAPH)
+  const [tabs, setTabs] = useState<string[]>([ROOT_GRAPH])
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addressMapNodeId, setAddressMapNodeId] = useState<string | null>(null)
   const [designName, setDesignName] = useState('untitled')
   const [status, setStatus] = useState('Ready')
   const [generatingRTL, setGeneratingRTL] = useState(false)
   const [validationOpen, setValidationOpen] = useState(false)
-  const [validation, setValidation] = useState<{ key: string; issues: ValidationIssue[] } | null>(null)
+  const [validation, setValidation] = useState<{ key: string; issues: WorkspaceIssue[] } | null>(null)
   const flowRef = useRef<ReactFlowInstance<BlockNode, Edge> | null>(null)
   const canvasRef = useRef<HTMLElement | null>(null)
   const [connectingPort, setConnectingPort] = useState<PortRef | null>(null)
@@ -149,17 +170,19 @@ export default function App() {
   const nodesRef = useRef(nodes)
   const edgesRef = useRef(edges)
   const designNameRef = useRef(designName)
-  const [savedFingerprint, setSavedFingerprint] = useState(() => designFingerprint(designName, nodes, edges))
+  const [savedFingerprint, setSavedFingerprint] = useState(() => workspaceFingerprint(designName, nodes, edges, []))
   const savedFingerprintRef = useRef(savedFingerprint)
   const pastRef = useRef<Snapshot[]>([])
   const futureRef = useRef<Snapshot[]>([])
+  const historiesRef = useRef<Map<string, GraphHistory>>(new Map())
+  const lastRemovedRef = useRef<ParentConnectionImpact[]>([])
   const theme = themePreference === 'system' ? (systemPrefersDark ? 'dark' : 'light') : themePreference
   nodesRef.current = nodes
   edgesRef.current = edges
   designNameRef.current = designName
   savedFingerprintRef.current = savedFingerprint
-  const isDirty = designFingerprint(designName, nodes, edges) !== savedFingerprint
-  const validationKey = JSON.stringify([designFingerprint(designName, nodes, edges), interfaces, templates])
+  const isDirty = workspaceFingerprint(designName, workspace.root.nodes, workspace.root.edges, workspace.subdesigns) !== savedFingerprint
+  const validationKey = JSON.stringify([workspaceFingerprint(designName, workspace.root.nodes, workspace.root.edges, workspace.subdesigns), interfaces, templates])
 
   useEffect(() => {
     if (!isDirty) return
@@ -186,16 +209,84 @@ export default function App() {
     setThemePreference(preference)
   }
 
-  const snapshot = useCallback((): Snapshot => ({ nodes: nodesRef.current, edges: edgesRef.current }), [])
+  const snapshot = useCallback((): Snapshot => ({ nodes: nodesRef.current, edges: edgesRef.current, restore: [] }), [])
   const record = useCallback((before: Snapshot) => {
     if (before.nodes === nodesRef.current && before.edges === edgesRef.current) return
-    pastRef.current = [...pastRef.current, before].slice(-100)
+    pastRef.current = [...pastRef.current, { ...before, restore: lastRemovedRef.current }].slice(-100)
     futureRef.current = []
     renderHistory((v) => v + 1)
   }, [])
-  const replace = useCallback((nextNodes: BlockNode[], nextEdges: Edge[]) => { nodesRef.current = nextNodes; edgesRef.current = nextEdges; setNodes(nextNodes); setEdges(nextEdges) }, [setEdges, setNodes])
-  const undo = useCallback(() => { const previous = pastRef.current.pop(); if (!previous) return; futureRef.current.push(snapshot()); replace(previous.nodes, previous.edges); setSelectedId(null); setStatus('Undo') }, [replace, snapshot])
-  const redo = useCallback(() => { const next = futureRef.current.pop(); if (!next) return; pastRef.current.push(snapshot()); replace(next.nodes, next.edges); setSelectedId(null); setStatus('Redo') }, [replace, snapshot])
+  const commitWorkspace = useCallback((next: Workspace) => {
+    workspaceRef.current = next
+    const graph = graphFor(next, activeGraphRef.current)
+    nodesRef.current = graph.nodes; edgesRef.current = graph.edges
+    setWorkspace(next); setNodes(graph.nodes); setEdges(graph.edges)
+  }, [setEdges, setNodes])
+  const confirmImpacts = useCallback((impacts: ParentConnectionImpact[]) => {
+    if (!impacts.length) return true
+    const lines = impacts.map(({ graphId, edge }) => {
+      const graph = graphFor(workspaceRef.current, graphId)
+      const name = graphId === ROOT_GRAPH ? designNameRef.current : workspaceRef.current.subdesigns.find((item) => item.id === graphId)?.name
+      const source = graph.nodes.find((node) => node.id === edge.source)
+      const target = graph.nodes.find((node) => node.id === edge.target)
+      return `${name}: ${source?.data.label ?? edge.source}.${source?.data.ports.find((port) => port.id === edge.sourceHandle)?.name ?? edge.sourceHandle} → ${target?.data.label ?? edge.target}.${target?.data.ports.find((port) => port.id === edge.targetHandle)?.name ?? edge.targetHandle}`
+    })
+    return window.confirm(`This change removes ${impacts.length} incompatible parent connection(s):\n\n${lines.join('\n')}\n\nContinue?`)
+  }, [])
+  const replace = useCallback((nextNodes: BlockNode[], nextEdges: Edge[]) => {
+    const result = changeGraph(workspaceRef.current, activeGraphRef.current, { nodes: nextNodes, edges: nextEdges })
+    if (!confirmImpacts(result.removed)) { lastRemovedRef.current = []; setStatus('Change cancelled'); return false }
+    lastRemovedRef.current = result.removed
+    commitWorkspace(result.workspace)
+    return true
+  }, [commitWorkspace, confirmImpacts])
+  const applyHistory = useCallback((direction: 'undo' | 'redo') => {
+    const from = direction === 'undo' ? pastRef : futureRef
+    const to = direction === 'undo' ? futureRef : pastRef
+    const target = from.current[from.current.length - 1]
+    if (!target) return
+    try {
+      for (const node of target.nodes) {
+        if (node.type === 'subdesign' && (!node.data.subdesignId || !canInsertSubdesign(workspaceRef.current, activeGraphRef.current, node.data.subdesignId))) {
+          throw new Error(`Cannot restore ${node.data.label}: its subdesign is missing or would create a cycle`)
+        }
+      }
+      const result = changeGraph(workspaceRef.current, activeGraphRef.current, target)
+      const synced = syncWorkspacePorts(result.workspace)
+      const removed = [...result.removed, ...synced.removed]
+      const next = restoreParentConnections(synced.workspace, target.restore)
+      if (!confirmImpacts(removed)) { setStatus('Change cancelled'); return }
+      const current = snapshot()
+      from.current = from.current.slice(0, -1)
+      to.current = [...to.current, { ...current, restore: removed }].slice(-100)
+      commitWorkspace(next); renderHistory((v) => v + 1)
+      setSelectedId(null); setStatus(direction === 'undo' ? 'Undo' : 'Redo')
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Could not restore history')
+    }
+  }, [commitWorkspace, confirmImpacts, snapshot])
+  const undo = useCallback(() => applyHistory('undo'), [applyHistory])
+  const redo = useCallback(() => applyHistory('redo'), [applyHistory])
+
+  const switchGraph = useCallback((id: string) => {
+    const graph = graphFor(workspaceRef.current, id)
+    historiesRef.current.set(activeGraphRef.current, { past: pastRef.current, future: futureRef.current })
+    const history = historiesRef.current.get(id) ?? { past: [], future: [] }
+    pastRef.current = history.past; futureRef.current = history.future
+    activeGraphRef.current = id; setActiveGraph(id)
+    nodesRef.current = graph.nodes; edgesRef.current = graph.edges
+    setNodes(graph.nodes); setEdges(graph.edges)
+    setTabs((previous) => previous.includes(id) ? previous : [...previous, id])
+    setExpanded(new Set()); setSelectedId(null); setAddressMapNodeId(null); setPortMenu(null); setConnectingPort(null)
+    renderHistory((v) => v + 1)
+    requestAnimationFrame(() => { void flowRef.current?.fitView({ padding: 0.2 }) })
+  }, [setEdges, setNodes])
+
+  const closeTab = (id: string) => {
+    if (id === ROOT_GRAPH) return
+    setTabs((previous) => previous.filter((item) => item !== id))
+    if (activeGraphRef.current === id) switchGraph(ROOT_GRAPH)
+  }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -327,6 +418,45 @@ export default function App() {
     record(before); setSelectedId(id); setStatus(`${template.label} added`)
   }
 
+  const addSubdesign = (id: string) => {
+    const current = workspaceRef.current
+    if (!canInsertSubdesign(current, activeGraphRef.current, id)) { setStatus('This subdesign would create a circular reference'); return }
+    const design = current.subdesigns.find((item) => item.id === id)
+    if (!design) return
+    const before = snapshot()
+    const nodeId = newId('subdesign', new Set(nodesRef.current.map((node) => node.id)))
+    const node: BlockNode = {
+      id: nodeId, type: 'subdesign', position: { x: 260 + nodesRef.current.length * 24, y: 120 + nodesRef.current.length * 24 },
+      data: { label: design.name, kind: 'Subdesign', subdesignId: id, ports: subdesignPorts(design.nodes), parameters: {} },
+    }
+    if (!replace([...nodesRef.current, node], edgesRef.current)) return
+    record(before); setSelectedId(nodeId); setStatus(`${design.name} added`)
+  }
+
+  const createSubdesign = () => {
+    const name = window.prompt('Subdesign name', `Subdesign ${workspaceRef.current.subdesigns.length + 1}`)?.trim()
+    if (!name) return
+    const design = { id: newId('design', new Set(workspaceRef.current.subdesigns.map((item) => item.id))), name, nodes: [], edges: [] }
+    commitWorkspace({ ...workspaceRef.current, subdesigns: [...workspaceRef.current.subdesigns, design] })
+    addSubdesign(design.id)
+    switchGraph(design.id)
+  }
+
+  const removeSubdesign = (id: string) => {
+    const current = workspaceRef.current
+    const design = current.subdesigns.find((item) => item.id === id)
+    if (!design || [current.root, ...current.subdesigns].some((graph) => graph.nodes.some((node) => node.type === 'subdesign' && node.data.subdesignId === id))) {
+      setStatus('Remove all instances before deleting this subdesign')
+      return
+    }
+    if (!window.confirm(`Delete subdesign "${design.name}" and its contents?`)) return
+    if (activeGraphRef.current === id) switchGraph(ROOT_GRAPH)
+    setTabs((previous) => previous.filter((item) => item !== id))
+    historiesRef.current.delete(id)
+    commitWorkspace({ ...current, subdesigns: current.subdesigns.filter((item) => item.id !== id) })
+    setStatus(`${design.name} deleted`)
+  }
+
   const addExternal = (kind: 'input' | 'output' | 'clock' | 'reset' | InterfacePortType, definition?: InterfaceDefinition, side?: 'master' | 'slave', signalDirection: 'input' | 'output' = 'input') => {
     const isInterface = !!definition && !!side
     const isSignal = kind === 'clock' || kind === 'reset'
@@ -352,18 +482,20 @@ export default function App() {
   const deleteSelected = () => {
     if (!selectedId) return
     const before = snapshot()
-    replace(nodesRef.current.filter((node) => node.id !== selectedId), edgesRef.current.filter((edge) => edge.source !== selectedId && edge.target !== selectedId))
+    if (!replace(nodesRef.current.filter((node) => node.id !== selectedId), edgesRef.current.filter((edge) => edge.source !== selectedId && edge.target !== selectedId))) return
     record(before); setSelectedId(null); setStatus('Node deleted')
   }
   const updateLabel = (label: string) => {
     if (!selectedId) return
+    const before = snapshot()
     const next = nodesRef.current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, label, ports: node.type?.startsWith('external') ? node.data.ports.map((port) => ({ ...port, name: label })) : node.data.ports } } : node) as BlockNode[]
-    nodesRef.current = next; setNodes(next)
+    if (replace(next, edgesRef.current)) record(before)
   }
   const updateWidth = (width: number) => {
     if (!selectedId || !Number.isInteger(width) || width < 1) return
+    const before = snapshot()
     const next = nodesRef.current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, ports: node.data.ports.map((port) => ({ ...port, width })) } } : node) as BlockNode[]
-    nodesRef.current = next; setNodes(next)
+    if (replace(next, edgesRef.current)) record(before)
   }
   const updateSettings = (update: (data: BlockNode['data']) => BlockNode['data']) => {
     if (!selectedId) return
@@ -450,33 +582,53 @@ export default function App() {
       const document = JSON.parse(await file.text()) as DesignDocument
       if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) throw new Error('Unsupported design format')
       const restored = (document.nodes as BlockNode[]).map((node) => ({ ...node, data: migrateInterfaceSources(migratePortConfiguration(node.data)) }))
-      const next = mergeDefinitions(restored, templates)
-      if (designFingerprint(designNameRef.current, nodesRef.current, edgesRef.current) !== savedFingerprintRef.current && !window.confirm('There are unsaved changes. Open another design and discard them?')) return
-      const name = document.name || 'untitled'
-      setSavedFingerprint(designFingerprint(name, restored, document.edges as Edge[]))
-      replace(next, document.edges as Edge[])
-      setDesignName(name); setSelectedId(null)
-      pastRef.current = []; futureRef.current = []; renderHistory((v) => v + 1)
-      setStatus(`Design opened${migrationWarning(next, templates)}`)
+      const restoredSubdesigns = readSubdesigns(document.subdesigns, restored)
+      const subdesigns = restoredSubdesigns.map((design) => ({
+        ...design,
+        nodes: mergeDefinitions(design.nodes.map((node) => ({ ...node, data: migrateInterfaceSources(migratePortConfiguration(node.data)) })), templates),
+      }))
+      const next = syncWorkspaceOnOpen({ root: { nodes: mergeDefinitions(restored, templates), edges: document.edges as Edge[] }, subdesigns })
+      const current = workspaceRef.current
+      if (workspaceFingerprint(designNameRef.current, current.root.nodes, current.root.edges, current.subdesigns) !== savedFingerprintRef.current && !window.confirm('There are unsaved changes. Open another design and discard them?')) return
+      const name = typeof document.name === 'string' && document.name ? document.name : 'untitled'
+      setSavedFingerprint(workspaceFingerprint(name, restored, document.edges as Edge[], restoredSubdesigns))
+      activeGraphRef.current = ROOT_GRAPH; setActiveGraph(ROOT_GRAPH); setTabs([ROOT_GRAPH]); setExpanded(new Set())
+      historiesRef.current.clear(); pastRef.current = []; futureRef.current = []; renderHistory((v) => v + 1)
+      commitWorkspace(next)
+      setDesignName(name); setSelectedId(null); setAddressMapNodeId(null); setPortMenu(null)
+      setStatus(`Design opened${migrationWarning(next.root.nodes, templates)}`)
     }
     catch (error) { setStatus(error instanceof Error ? error.message : 'Could not open design') }
   }
   const designDocument = () => {
-    const savedNodes = nodesRef.current.map((node) => ({ ...node, data: migrateInterfaceSources(node.data) }))
-    return { version: 1, name: designName, nodes: savedNodes, edges: edgesRef.current, definitions: designDefinitions(savedNodes) }
+    const current = workspaceRef.current
+    const savedNodes = current.root.nodes.map((node) => ({ ...node, data: migrateInterfaceSources(node.data) }))
+    const subdesigns = current.subdesigns.map((design) => ({
+      ...design, nodes: design.nodes.map((node) => ({ ...node, data: migrateInterfaceSources(node.data) })),
+    }))
+    return { version: 1, name: designName, nodes: savedNodes, edges: current.root.edges, definitions: designDefinitions([...savedNodes, ...subdesigns.flatMap((design) => design.nodes)]), ...(subdesigns.length ? { subdesigns } : {}) }
   }
   const runValidation = () => {
     const key = validationKey
-    const issues = validateDesign(nodesRef.current, edgesRef.current, templates, interfaces)
+    const current = workspaceRef.current
+    const graphs = [{ id: ROOT_GRAPH, name: designName, ...current.root }, ...current.subdesigns]
+    const issues = graphs.flatMap((graph) => validateDesign(graph.nodes, graph.edges, templates, interfaces).map((issue) => ({
+      ...issue, graphId: graph.id, message: `[${graph.name}] ${issue.message}`,
+    })))
     setValidationOpen(true)
     setValidation({ key, issues })
   }
-  const focusIssue = (issue: ValidationIssue) => {
+  const focusIssue = (issue: WorkspaceIssue) => {
+    if (issue.graphId !== activeGraphRef.current) {
+      switchGraph(issue.graphId)
+      requestAnimationFrame(() => { requestAnimationFrame(() => focusIssue(issue)) })
+      return
+    }
     const edge = issue.edgeId ? edgesRef.current.find((item) => item.id === issue.edgeId) : undefined
     const nodeIds = issue.nodeId ? [issue.nodeId] : edge ? [edge.source, edge.target] : []
     const existing = nodeIds.filter((id) => nodesRef.current.some((node) => node.id === id))
     if (edge) {
-      const key = edgeTypesById.get(edge.id)
+      const key = edgeTypeKey(edge, new Map(nodesRef.current.map((node) => [node.id, node])))
       if (key) setHiddenEdgeTypes((previous) => { const next = new Set(previous); next.delete(key); return next })
     }
     replace(nodesRef.current.map((node) => ({ ...node, selected: issue.nodeId === node.id })), edgesRef.current.map((item) => ({ ...item, selected: item.id === edge?.id })))
@@ -484,8 +636,9 @@ export default function App() {
     if (existing.length) void flowRef.current?.fitView({ nodes: existing.map((id) => ({ id })), padding: 0.6, duration: 300, maxZoom: 1.2 })
     if (issue.addressMap && issue.nodeId) setAddressMapNodeId(issue.nodeId)
   }
-  const exportDesign = () => { const blob = new Blob([JSON.stringify(designDocument(), null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${designName || 'block-design'}.json`; anchor.click(); URL.revokeObjectURL(url); setSavedFingerprint(designFingerprint(designName, nodesRef.current, edgesRef.current)); setStatus('Design exported') }
+  const exportDesign = () => { const blob = new Blob([JSON.stringify(designDocument(), null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${designName || 'block-design'}.json`; anchor.click(); URL.revokeObjectURL(url); const current = workspaceRef.current; setSavedFingerprint(workspaceFingerprint(designName, current.root.nodes, current.root.edges, current.subdesigns)); setStatus('Design exported') }
   const generateRTL = async () => {
+    if (workspaceRef.current.subdesigns.length || workspaceRef.current.root.nodes.some((node) => node.type === 'subdesign')) { setStatus('RTL generation for hierarchical designs is not supported'); return }
     setGeneratingRTL(true)
     setStatus('Generating RTL')
     try {
@@ -517,7 +670,7 @@ export default function App() {
 
   const addressMapNode = nodes.find((node) => node.id === addressMapNodeId)
   return <main className={`app-shell${validationOpen ? ' validation-open' : ''}`}>
-    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(files); event.target.value = '' }} /><button onClick={runValidation}>Validate Design</button><button onClick={() => void generateRTL()} disabled={generatingRTL}>{generatingRTL ? 'Generating RTL…' : 'Generate RTL'}</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(files); event.target.value = '' }} /><button onClick={runValidation}>Validate Design</button><button onClick={() => void generateRTL()} disabled={generatingRTL || workspace.subdesigns.length > 0} title={workspace.subdesigns.length ? 'RTL generation for hierarchical designs is not supported' : undefined}>{generatingRTL ? 'Generating RTL…' : 'Generate RTL'}</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
     <div className="workspace">
       <aside className="sidebar panel">
         <details className="wire-filter" open>
@@ -541,9 +694,60 @@ export default function App() {
             </label>)}
           </div>
         </details>
+        <div className="subdesign-library">
+          <div className="panel-title">Subdesigns</div>
+          <button className="library-item" onClick={createSubdesign}><span className="library-icon">+</span><strong>New subdesign</strong></button>
+          {workspace.subdesigns.length > 0 && <small className="subdesign-rtl-note">RTL generation is unavailable for projects with subdesigns.</small>}
+          {workspace.subdesigns.map((design) => <div className="subdesign-library-row" key={design.id}>
+            <button className="library-item" disabled={!canInsertSubdesign(workspace, activeGraph, design.id)} title={!canInsertSubdesign(workspace, activeGraph, design.id) ? 'Would create a circular reference' : `Add ${design.name}`} onClick={() => addSubdesign(design.id)}><span className="library-icon">S</span><strong>{design.name}</strong></button>
+            <button aria-label={`Edit ${design.name}`} title="Edit subdesign" onClick={() => switchGraph(design.id)}>✎</button>
+            <button aria-label={`Delete ${design.name}`} title="Delete unused subdesign" disabled={[workspace.root, ...workspace.subdesigns].some((graph) => graph.nodes.some((node) => node.type === 'subdesign' && node.data.subdesignId === design.id))} onClick={() => removeSubdesign(design.id)}>×</button>
+          </div>)}
+        </div>
         <div className="palette"><div className="panel-title">External Ports</div><button className="library-item" onClick={() => addExternal('input')}><span className="library-icon">I</span><strong>External Input</strong></button><button className="library-item" onClick={() => addExternal('output')}><span className="library-icon">O</span><strong>External Output</strong></button><button className="library-item" onClick={() => addExternal('clock')}><span className="library-icon">C</span><strong>Clock Input</strong></button><button className="library-item" onClick={() => addExternal('clock', undefined, undefined, 'output')}><span className="library-icon">C</span><strong>Clock Output</strong></button><button className="library-item" onClick={() => addExternal('reset')}><span className="library-icon">R</span><strong>Reset Input</strong></button><button className="library-item" onClick={() => addExternal('reset', undefined, undefined, 'output')}><span className="library-icon">R</span><strong>Reset Output</strong></button>{interfaces.map((definition) => <div key={definition.name} className="interface-library-group"><div className="interface-library-label">{definition.label}</div><button className="library-item" onClick={() => addExternal('input', definition, 'master')}><span className="library-icon">M</span><strong>{definition.label} Master</strong></button><button className="library-item" onClick={() => addExternal('input', definition, 'slave')}><span className="library-icon">S</span><strong>{definition.label} Slave</strong></button></div>)}<div className="panel-title block-library-title">Block Library</div>{templates.map((template) => <button className="library-item" key={template.kind} onClick={() => addBlock(template)}><span className="library-icon">{template.kind.slice(0, 1)}</span><span><strong>{template.label}</strong><small>{template.kind}</small></span></button>)}</div>
       </aside>
-      <section className="canvas-panel" ref={canvasRef} onContextMenuCapture={openPortMenu}><ReactFlow nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onInit={(instance) => { flowRef.current = instance }} onNodesChange={(changes: NodeChange<BlockNode>[]) => { const before = snapshot(); const next = applyNodeChanges(changes, nodesRef.current) as BlockNode[]; nodesRef.current = next; onNodesChangeBase(changes); if (changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) record(before) }} onEdgesChange={(changes: EdgeChange<Edge>[]) => { const before = snapshot(); const next = applyEdgeChanges(changes, edgesRef.current); edgesRef.current = next; onEdgesChangeBase(changes); if (changes.some((change) => change.type === 'remove')) record(before) }} onConnect={onConnect} onConnectStart={(_, params) => { if (params.nodeId && params.handleId) { setPortMenu(null); setConnectingPort({ nodeId: params.nodeId, portId: params.handleId }) } }} onConnectEnd={() => setConnectingPort(null)} onClickConnectStart={(_, params) => { if (params.nodeId && params.handleId) { setPortMenu(null); setConnectingPort({ nodeId: params.nodeId, portId: params.handleId }) } }} onClickConnectEnd={() => setConnectingPort(null)} isValidConnection={isValidConnection} onSelectionChange={({ nodes: selected }: OnSelectionChangeParams) => setSelectedId(selected.length === 1 ? selected[0].id : null)} fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']}><Background variant={BackgroundVariant.Dots} gap={16} size={1} color={theme === 'dark' ? '#475569' : '#d7e0eb'} /><Controls /></ReactFlow></section>
+      <SubdesignViewContext.Provider value={{ designs: workspace.subdesigns, expanded, toggle: (nodeId) => setExpanded((previous) => { const next = new Set(previous); if (next.has(nodeId)) next.delete(nodeId); else next.add(nodeId); return next }) }}>
+        <section className="canvas-panel" ref={canvasRef} onContextMenuCapture={openPortMenu}>
+          <div className="design-tabs" role="tablist" aria-label="Open designs">
+            {tabs.map((id) => <div className={`design-tab${activeGraph === id ? ' active' : ''}`} key={id}>
+              <button role="tab" aria-selected={activeGraph === id} onClick={() => switchGraph(id)}>{id === ROOT_GRAPH ? designName : workspace.subdesigns.find((design) => design.id === id)?.name}</button>
+              {id !== ROOT_GRAPH && <button className="close-tab" aria-label={`Close ${workspace.subdesigns.find((design) => design.id === id)?.name}`} onClick={() => closeTab(id)}>×</button>}
+            </div>)}
+          </div>
+          <div className="canvas-flow"><ReactFlow
+            nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+            onInit={(instance) => { flowRef.current = instance }}
+            onNodesChange={(changes: NodeChange<BlockNode>[]) => {
+              const before = snapshot()
+              const next = applyNodeChanges(changes, nodesRef.current) as BlockNode[]
+              if (replace(next, edgesRef.current) && changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) record(before)
+            }}
+            onEdgesChange={(changes: EdgeChange<Edge>[]) => {
+              const before = snapshot()
+              const next = applyEdgeChanges(changes, edgesRef.current)
+              if (replace(nodesRef.current, next) && changes.some((change) => change.type === 'remove')) record(before)
+            }}
+            onBeforeDelete={async ({ nodes: deletedNodes, edges: deletedEdges }) => {
+              const ids = new Set(deletedNodes.map((node) => node.id))
+              const edgeIds = new Set(deletedEdges.map((edge) => edge.id))
+              const before = snapshot()
+              if (replace(nodesRef.current.filter((node) => !ids.has(node.id)), edgesRef.current.filter((edge) => !edgeIds.has(edge.id) && !ids.has(edge.source) && !ids.has(edge.target)))) {
+                record(before); setSelectedId(null); setStatus('Selection deleted')
+              }
+              return false
+            }}
+            onNodeDoubleClick={(_, node) => { if (node.type === 'subdesign' && node.data.subdesignId) switchGraph(node.data.subdesignId) }}
+            onConnect={onConnect}
+            onConnectStart={(_, params) => { if (params.nodeId && params.handleId) { setPortMenu(null); setConnectingPort({ nodeId: params.nodeId, portId: params.handleId }) } }}
+            onConnectEnd={() => setConnectingPort(null)}
+            onClickConnectStart={(_, params) => { if (params.nodeId && params.handleId) { setPortMenu(null); setConnectingPort({ nodeId: params.nodeId, portId: params.handleId }) } }}
+            onClickConnectEnd={() => setConnectingPort(null)}
+            isValidConnection={isValidConnection}
+            onSelectionChange={({ nodes: selected }: OnSelectionChangeParams) => setSelectedId(selected.length === 1 ? selected[0].id : null)}
+            fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']}
+          ><Background variant={BackgroundVariant.Dots} gap={16} size={1} color={theme === 'dark' ? '#475569' : '#d7e0eb'} /><Controls /></ReactFlow></div>
+        </section>
+      </SubdesignViewContext.Provider>
       <aside className="properties panel"><div className="panel-title">Properties</div>{selectedNode ? <div className="property-form"><label>Name<input value={selectedNode.data.label} onChange={(event) => updateLabel(event.target.value)} /></label><label>Type<input value={selectedNode.data.kind} readOnly /></label>{selectedNode.type === 'block' && <label>Port layout<select value={selectedNode.data.portLayout === 'horizontal' ? 'horizontal' : 'vertical'} onChange={(event) => { const layout = event.target.value; if (layout === 'horizontal' || layout === 'vertical') updatePortLayout(layout) }}><option value="vertical">Vertical (left / right)</option><option value="horizontal">Horizontal (top / bottom)</option></select></label>}{selectedBus && <><button className="address-map-button" onClick={() => setAddressMapNodeId(selectedNode.id)}>Address Map</button><small className="address-map-summary">{selectedBus.interface.toUpperCase()} · {selectedBusPorts.slaves.length} slave groups · {selectedBusPorts.masters.length} master ports</small></>}{(selectedNode.type === 'externalInput' || selectedNode.type === 'externalOutput') && <label>Width (bits)<input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateWidth(Number(event.target.value))} /></label>}{selectedNode.type === 'block' && <><BlockSettingsEditor key={selectedNode.id} data={selectedNode.data} onParameterChange={updateParameter} onDefineChange={updateDefine} /><GeneratedPortsEditor key={selectedNode.id} data={selectedNode.data} onCountChange={updatePortCount} onEnabledChange={updatePortEnabled} /></>}<div className="property-section"><strong>Ports</strong>{selectedNode.data.ports.map((port) => <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? (port.width !== undefined ? `${port.direction} · ${port.width}-bit` : port.direction)}</small></div>)}</div><button className="danger" onClick={deleteSelected}>Delete node</button></div> : <p className="empty-state">Select a node to edit its properties.</p>}</aside>
     </div>
     {validationOpen && <section className="validation-panel" aria-label="Design validation">
