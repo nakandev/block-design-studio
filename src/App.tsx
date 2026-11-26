@@ -342,7 +342,7 @@ export default function App() {
     const before = snapshot()
     const count = nodesRef.current.filter((node) => node.type === nodeType).length
     const id = `${nodeType}_${Date.now()}_${count}`
-    const display = isInterface ? `${definition.label} ${side}` : isAxi || isI2c ? kind : isSignal ? `${kind[0].toUpperCase()}${kind.slice(1)} ${signalDirection === 'input' ? 'Input' : 'Output'}` : `External ${kind[0].toUpperCase()}${kind.slice(1)}`
+    const display = isInterface ? `${definition.label} ${side}` : isAxi || isI2c ? kind : isSignal ? `${kind[0].toUpperCase()}${kind.slice(1)} ${signalDirection === 'input' ? 'Input' : 'Output'}` : `${kind[0].toUpperCase()}${kind.slice(1)}`
     const interfaceSources = captureInterfaceSources(usedInterfaces([port]), interfaces)
     const newNode: BlockNode = { id, type: nodeType, position: { x: interfaceType.endsWith('.master') || (isSignal && signalDirection === 'output') ? 560 : 40, y: 140 + count * 64 }, data: { label, kind: `External ${display}`, ports: withInterfaceSources([port], interfaceSources), parameters: {}, interfaceSources } }
     replace([...nodesRef.current, newNode], edgesRef.current)
