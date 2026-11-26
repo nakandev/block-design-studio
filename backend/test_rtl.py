@@ -3,7 +3,7 @@ import json
 import unittest
 import zipfile
 
-from .rtl import GenerationError, generate_bundle, make_top
+from .rtl import GenerationError, generate_bundle, make_top, validate_rtl
 
 
 def block_node(node_id, kind, ports, parameters=None):
@@ -129,6 +129,19 @@ class RTLGenerationTests(unittest.TestCase):
         a["data"]["label"] = " "
         with self.assertRaisesRegex(GenerationError, "nonempty label"):
             make_top(payload([a], [], blocks=self.blocks))
+
+    def test_validation_reports_independent_label_errors_and_generation_error(self):
+        a = block_node("first", "Sink", [])
+        b = block_node("second", "Sink", [])
+        c = block_node("third", "Sink", [])
+        a["data"]["label"] = "same-label"
+        b["data"]["label"] = "same label"
+        c["data"]["label"] = " "
+        issues = validate_rtl(payload([a, b, c], [], blocks=self.blocks))
+        self.assertTrue(any(issue.get("nodeId") == "second" and "duplicate instance" in issue["message"] for issue in issues))
+        self.assertTrue(any(issue.get("nodeId") == "third" and "nonempty" in issue["message"] for issue in issues))
+        self.assertEqual(validate_rtl(payload([a], [], blocks=self.blocks)), [])
+        self.assertTrue(any("No block definition" in issue["message"] for issue in validate_rtl(payload([a], [], blocks=[]))))
 
     def test_external_interface_port_becomes_top_level_port(self):
         source = block_node("src", "Source Block", [

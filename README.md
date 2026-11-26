@@ -35,6 +35,8 @@ GPIO and I2C use `inout` for physical shared pins. I3C models controller-driven 
 
 With Python 3.9 or later, start the Python backend with `npm run backend` and the Vite frontend with `npm run dev` in separate terminals. The frontend proxies `/api` requests to the loopback backend. **Generate RTL** posts the current design and loaded definitions to `/api/rtl/generate` and downloads a ZIP containing `top.sv` and `rtl-manifest.json`.
 
+**Validate Design** opens a results panel without changing the design. It checks connections and address ranges and warns about unconnected ports; selecting a result focuses the relevant node or connection. The backend also checks RTL generation using the currently loaded definitions. RTL checks report the first generation error at a time (along with block label errors), so revalidate after corrections. If the backend is unavailable, the panel reports that RTL validation could not run. Results become stale after the design or definitions change.
+
 The backend generates a structural top-level module: block module names come from `kind` after SystemVerilog identifier sanitization, interface pins are flattened as `<port name>_<signal name>`, scalar ports use their sanitized configured names, and signal directions and widths are checked on each connection. Interface width expressions use matching block parameters when present or the interface parameter defaults otherwise. Only configured, materialized ports are emitted; generation templates and Address Maps are ignored.
 
 Instance names and internal wire names are derived from block labels and port names, not node or port IDs. Labels must be nonempty and must not collide after identifier sanitization; rename blocks if generation reports a collision.
@@ -43,7 +45,9 @@ The generated archive intentionally does not contain block RTL source files yet.
 
 Run backend tests with `npm run test:backend`.
 
-Exported and browser-saved designs include an `interfaceSource` with `path` and `version` on each interface port and generated port definition. Generated ports inherit their definition's source. Paths are relative to the loaded manifest's folder; unknown sources have `null` path and version. Older designs with per-node `interfaceSources` are migrated to per-port sources when opened or saved.
+Use **Export JSON** to save a design to a file and **Open** to restore it. Opening another file or leaving the page warns when the design has changed since the last export or open; browser unload warnings depend on browser support and interaction. If loading a design applies changes from currently loaded definitions, export again to save those changes.
+
+Exported designs include an `interfaceSource` with `path` and `version` on each interface port and generated port definition. Generated ports inherit their definition's source. Paths are relative to the loaded manifest's folder; unknown sources have `null` path and version. Older designs with per-node `interfaceSources` are migrated to per-port sources when opened or exported.
 
 For example, an interface port can include `"interfaceSource": { "path": "interface/ahb.json", "version": "0.1.0" }`. Individual generated-port sources are retained when ports are disabled or their count is reduced and later restored.
 

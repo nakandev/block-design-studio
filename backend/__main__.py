@@ -4,7 +4,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .rtl import GenerationError, generate_bundle
+from .rtl import GenerationError, generate_bundle, validate_rtl
 
 
 MAX_REQUEST_BYTES = 16 * 1024 * 1024
@@ -21,7 +21,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b'{"status":"ok"}')
 
     def do_POST(self) -> None:
-        if self.path != "/api/rtl/generate":
+        if self.path not in ("/api/rtl/generate", "/api/rtl/validate"):
             self.send_error(404)
             return
         raw_length = self.headers.get("Content-Length", "")
@@ -35,6 +35,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             payload = json.loads(self.rfile.read(length))
+            if self.path == "/api/rtl/validate":
+                self.send_json(200, {"issues": validate_rtl(payload)})
+                return
             archive = generate_bundle(payload)
         except (json.JSONDecodeError, UnicodeDecodeError) as error:
             self.send_json(400, {"error": f"Invalid JSON: {error}"})
@@ -49,7 +52,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(archive)
 
-    def send_json(self, status: int, value: dict[str, str]) -> None:
+    def send_json(self, status: int, value: dict) -> None:
         body = json.dumps(value).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")

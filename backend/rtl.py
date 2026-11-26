@@ -305,6 +305,36 @@ def interface_signals(definition: dict[str, Any], side: str) -> list[dict[str, A
     return signals
 
 
+def validate_rtl(payload: Any) -> list[dict[str, str]]:
+    issues: list[dict[str, str]] = []
+    design = payload.get("design") if isinstance(payload, dict) else None
+    nodes = design.get("nodes") if isinstance(design, dict) else None
+    if isinstance(nodes, list):
+        names: dict[str, str] = {}
+        for node in nodes:
+            if not isinstance(node, dict) or node.get("type") != "block":
+                continue
+            node_id, data = node.get("id"), node.get("data")
+            if not isinstance(node_id, str) or not isinstance(data, dict):
+                continue
+            label = data.get("label")
+            if not isinstance(label, str) or not label.strip():
+                issues.append({"message": f"Block {node_id} needs a nonempty label for RTL naming", "nodeId": node_id})
+                continue
+            name = identifier(f"u_{label}", "u")
+            if name in names:
+                issues.append({"message": f"Block labels produce duplicate instance name {name}; rename the blocks", "nodeId": node_id})
+            else:
+                names[name] = node_id
+    try:
+        make_top(payload)
+    except GenerationError as error:
+        message = str(error)
+        if not any(issue["message"] == message for issue in issues):
+            issues.append({"message": message})
+    return issues
+
+
 def make_top(payload: Any) -> tuple[str, dict[str, Any]]:
     if not isinstance(payload, dict):
         raise GenerationError("Request body must be an object")
