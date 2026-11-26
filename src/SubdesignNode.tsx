@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo } from 'react'
-import { useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ViewportPortal, useInternalNode, useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import BlockNodeView, { type BlockNode } from './BlockNode'
 import type { Subdesign } from './subdesign'
 
@@ -47,6 +47,10 @@ export function SubdesignPreview({ design }: { design: Subdesign }) {
 export default function SubdesignNodeView(props: NodeProps<BlockNode>) {
   const context = useContext(SubdesignViewContext)
   const updateNodeInternals = useUpdateNodeInternals()
+  const internalNode = useInternalNode(props.id)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
+  const [layout, setLayout] = useState<{ width: number; height: number; left: number; top: number } | null>(null)
   const expanded = context?.expanded.has(props.id) ?? false
   const design = context?.designs.find((item) => item.id === props.data.subdesignId)
   const displayData = useMemo(() => {
@@ -58,12 +62,37 @@ export default function SubdesignNodeView(props: NodeProps<BlockNode>) {
     }) }
   }, [design, expanded, props.data])
   useEffect(() => { updateNodeInternals(props.id) }, [expanded, design, props.id, updateNodeInternals])
-  return <div className={`subdesign-node${expanded ? ' expanded' : ''}`}>
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    const preview = previewRef.current
+    if (!expanded || !container || !preview) { setLayout(null); return }
+    const measure = () => {
+      const next = { width: container.offsetWidth, height: container.offsetHeight, left: preview.offsetLeft, top: preview.offsetTop }
+      setLayout((previous) => previous && previous.width === next.width && previous.height === next.height && previous.left === next.left && previous.top === next.top ? previous : next)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(container)
+    observer.observe(preview)
+    return () => observer.disconnect()
+  }, [expanded, design])
+  return <div ref={containerRef} className={`subdesign-node${expanded ? ' expanded' : ''}`}>
     <BlockNodeView {...props} data={displayData} />
     <button className="subdesign-toggle nodrag nopan" aria-expanded={expanded} onClick={(event) => {
       event.stopPropagation()
       context?.toggle(props.id)
     }}>{expanded ? 'Collapse' : 'Expand'}</button>
-    {expanded && (design ? <SubdesignPreview design={design} /> : <div className="subdesign-empty">Subdesign not found</div>)}
+    {expanded && <>
+      <div ref={previewRef} className="subdesign-preview-placeholder" aria-hidden="true">
+        {design ? <SubdesignPreview design={design} /> : <div className="subdesign-empty">Subdesign not found</div>}
+      </div>
+      {layout && internalNode && <ViewportPortal>
+        <div className="subdesign-backdrop" style={{ left: internalNode.internals.positionAbsolute.x, top: internalNode.internals.positionAbsolute.y, width: layout.width, height: layout.height }}>
+          <div className="subdesign-backdrop-preview" style={{ left: layout.left, top: layout.top }}>
+            {design ? <SubdesignPreview design={design} /> : <div className="subdesign-empty">Subdesign not found</div>}
+          </div>
+        </div>
+      </ViewportPortal>}
+    </>}
   </div>
 }
