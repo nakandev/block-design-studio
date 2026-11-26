@@ -1,5 +1,9 @@
 {
   "version": "0.1.0",
   "name": "uart",
-  "label": "UART"
+  "label": "UART",
+  "signals": [
+    { "name": "TX", "direction": "output", "width": 1 },
+    { "name": "RX", "direction": "input", "width": 1 }
+  ]
 }

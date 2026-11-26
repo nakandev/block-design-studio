@@ -62,6 +62,33 @@ test('all example references resolve and preserve the AXI GPIO settings', async 
   assert.equal(get(axi, 'slave', 'RVALID').direction, 'output')
   assert.equal(axi.parameters.DATA_WIDTH.value, '32')
   assert.equal(interfaceSignals(axi, 'master').length, 19)
+  const examples = Object.fromEntries(parsed.interfaces.map((entry) => [entry.name, entry]))
+  const expected = {
+    apb: ['PADDR', 'PSEL', 'PENABLE', 'PWRITE', 'PWDATA', 'PSTRB', 'PPROT', 'PRDATA', 'PREADY', 'PSLVERR'],
+    bram: ['EN', 'WE', 'ADDR', 'DIN', 'DOUT'],
+    gpio: ['GPIO'],
+    i2c: ['SCL', 'SDA'],
+    i3c: ['SCL', 'SDA'],
+    jtag: ['TCK', 'TMS', 'TDI', 'TDO'],
+    spi: ['SCLK', 'CS_N', 'MOSI', 'MISO'],
+    uart: ['TX', 'RX'],
+    wb: ['ADR', 'DAT_W', 'DAT_R', 'SEL', 'WE', 'CYC', 'STB', 'ACK'],
+  }
+  for (const [name, names] of Object.entries(expected)) {
+    const master = interfaceSignals(examples[name], 'master')
+    const slave = interfaceSignals(examples[name], 'slave')
+    assert.deepEqual(master.map((signal) => signal.name), names)
+    for (const [index, signal] of master.entries()) {
+      assert.equal(slave[index].width, signal.width)
+      assert.equal(slave[index].direction, signal.direction === 'inout' ? 'inout' : signal.direction === 'input' ? 'output' : 'input')
+    }
+  }
+  assert.equal(get(examples.apb, 'master', 'PSTRB').width, 'DATA_WIDTH / 8')
+  assert.equal(get(examples.wb, 'master', 'ACK').direction, 'input')
+  assert.equal(get(examples.i2c, 'slave', 'SCL').direction, 'inout')
+  assert.equal(get(examples.i3c, 'slave', 'SDA').direction, 'inout')
+  assert.equal(get(examples.gpio, 'master', 'GPIO').width, 'DATA_WIDTH')
+  assert.equal(get(examples.bram, 'master', 'DOUT').direction, 'input')
   const gpio = parsed.blocks.find((block) => block.kind === 'AXI_GPIO')
   assert.deepEqual(gpio.parameters, { WIDTH: { type: 'int', value: '32' } })
   assert.deepEqual(gpio.defines, { DEBUG: { enabled: true, value: '1' } })
@@ -74,7 +101,7 @@ test('validates signal lists and retains legacy interfaces', () => {
   assert.deepEqual(parse({ signals: [signal] }).signals, [signal])
   for (const invalid of [
     { ...signal, width: 0 }, { ...signal, width: 1.5 }, { ...signal, width: ' ' },
-    { ...signal, direction: 'inout' }, { ...signal, name: 'not valid' }, null,
+    { ...signal, direction: 'invalid' }, { ...signal, name: 'not valid' }, null,
   ]) {
     assert.throws(() => parse({ signals: [invalid] }), /Invalid signals signal/)
   }
@@ -83,4 +110,7 @@ test('validates signal lists and retains legacy interfaces', () => {
   assert.throws(() => parse({ signals: [signal, signal] }), /Duplicate signal/)
   assert.throws(() => parse({ signals: [signal], slaveSignals: [signal] }), /Duplicate signal/)
   assert.doesNotThrow(() => parse({ masterSignals: [signal], slaveSignals: [signal] }))
+  const bidirectional = parse({ signals: [{ name: 'SDA', direction: 'inout', width: 1 }] })
+  assert.equal(interfaceSignals(bidirectional, 'master')[0].direction, 'inout')
+  assert.equal(interfaceSignals(bidirectional, 'slave')[0].direction, 'inout')
 })

@@ -189,6 +189,20 @@ class RTLGenerationTests(unittest.TestCase):
         with self.assertRaisesRegex(GenerationError, "role-specific signals"):
             make_top(payload([master, slave], [edge], [ahb], self.blocks))
 
+    def test_rejects_inout_interfaces_without_guessing_wiring(self):
+        interface = {"name": "gpio", "signals": [{"name": "GPIO", "direction": "inout", "width": 1}]}
+        node = block_node("src", "Source Block", [
+            {"id": "pins", "name": "pins", "direction": "output", "type": "gpio.master"},
+        ])
+        with self.assertRaisesRegex(GenerationError, "does not support inout.*gpio"):
+            make_top(payload([node], [], [interface], self.blocks))
+        node["data"]["ports"][0].update({"direction": "input", "type": "gpio.slave"})
+        with self.assertRaisesRegex(GenerationError, "does not support inout.*gpio"):
+            make_top(payload([node], [], [interface], self.blocks))
+        node["type"] = "externalInterfaceSlave"
+        with self.assertRaisesRegex(GenerationError, "does not support inout.*gpio"):
+            make_top(payload([node], [], [interface], self.blocks))
+
     def test_rejects_unsafe_parameters_and_unresolved_widths(self):
         node = block_node("src", "Source Block", [{"id": "bus", "name": "bus", "direction": "output", "type": "bus.master"}], {"DATA_WIDTH": "8); endmodule"})
         with self.assertRaisesRegex(GenerationError, "Unsupported expression"):

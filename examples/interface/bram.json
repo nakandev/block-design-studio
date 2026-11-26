@@ -1,5 +1,16 @@
 {
   "version": "0.1.0",
   "name": "bram",
-  "label": "BRAM"
+  "label": "BRAM",
+  "parameters": {
+    "ADDR_WIDTH": { "type": "int", "value": "10" },
+    "DATA_WIDTH": { "type": "int", "value": "32" }
+  },
+  "signals": [
+    { "name": "EN", "direction": "output", "width": 1 },
+    { "name": "WE", "direction": "output", "width": 1 },
+    { "name": "ADDR", "direction": "output", "width": "ADDR_WIDTH" },
+    { "name": "DIN", "direction": "output", "width": "DATA_WIDTH" },
+    { "name": "DOUT", "direction": "input", "width": "DATA_WIDTH" }
+  ]
 }

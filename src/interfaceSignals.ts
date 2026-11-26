@@ -12,7 +12,7 @@ export function validateInterfaceSignals(item: Record<string, unknown>, name: st
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`Invalid ${key} signal ${index + 1} in interface ${name}`)
       const signal = entry as Record<string, unknown>
       if (typeof signal.name !== 'string' || !/^[a-zA-Z_][a-zA-Z0-9_$]*$/.test(signal.name) ||
-        (signal.direction !== 'input' && signal.direction !== 'output') ||
+        (signal.direction !== 'input' && signal.direction !== 'output' && signal.direction !== 'inout') ||
         !((typeof signal.width === 'number' && Number.isSafeInteger(signal.width) && signal.width > 0) || (typeof signal.width === 'string' && signal.width.trim()))) {
         throw new Error(`Invalid ${key} signal ${index + 1} in interface ${name}: expected a name, direction and positive width or expression`)
       }
@@ -34,7 +34,7 @@ export function validateInterfaceSignals(item: Record<string, unknown>, name: st
 export function interfaceSignals(definition: InterfaceDefinition, side: 'master' | 'slave'): InterfaceSignal[] {
   const common = (definition.signals ?? []).map((signal) => ({
     ...signal,
-    direction: side === 'master' ? signal.direction : signal.direction === 'input' ? 'output' as const : 'input' as const,
+    direction: side === 'master' || signal.direction === 'inout' ? signal.direction : signal.direction === 'input' ? 'output' as const : 'input' as const,
   }))
   return [...common, ...(side === 'master' ? definition.masterSignals ?? [] : definition.slaveSignals ?? []).map((signal) => ({ ...signal }))]
 }

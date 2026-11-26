@@ -1,5 +1,9 @@
 {
   "version": "0.1.0",
   "name": "i3c",
-  "label": "I3C"
+  "label": "I3C",
+  "signals": [
+    { "name": "SCL", "direction": "output", "width": 1 },
+    { "name": "SDA", "direction": "inout", "width": 1 }
+  ]
 }

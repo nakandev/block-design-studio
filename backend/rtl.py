@@ -239,7 +239,7 @@ def load_interfaces(raw: Any) -> dict[str, dict[str, Any]]:
                 if not isinstance(signal, dict):
                     raise GenerationError(f"Invalid signal in interface {name!r}")
                 signal_name = validate_identifier(signal.get("name"), f"signal in interface {name}")
-                if signal.get("direction") not in ("input", "output"):
+                if signal.get("direction") not in ("input", "output", "inout"):
                     raise GenerationError(f"Invalid direction for {name}.{signal_name}")
                 if not isinstance(signal.get("width"), (int, str)) or isinstance(signal.get("width"), bool):
                     raise GenerationError(f"Invalid width for {name}.{signal_name}")
@@ -298,7 +298,7 @@ def interface_signals(definition: dict[str, Any], side: str) -> list[dict[str, A
         direction = signal["direction"]
         signals.append({
             "name": signal["name"],
-            "direction": direction if side == "master" else ("output" if direction == "input" else "input"),
+            "direction": direction if side == "master" or direction == "inout" else ("output" if direction == "input" else "input"),
             "width": signal["width"],
         })
     signals.extend(definition.get(f"{side}Signals", []))
@@ -389,6 +389,8 @@ def make_top(payload: Any) -> tuple[str, dict[str, Any]]:
                 signals = interface_signals(definition, side)
                 if not signals:
                     raise GenerationError(f"Interface {interface_name!r} has no signal definitions")
+                if any(signal["direction"] == "inout" for signal in signals):
+                    raise GenerationError(f"RTL generation does not support inout signals on interface {interface_name!r} ({node_id}.{port_id})")
                 signal_names: set[str] = set()
                 for signal in signals:
                     signal_name = validate_identifier(signal.get("name"), f"signal in interface {interface_name}")

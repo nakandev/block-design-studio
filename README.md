@@ -8,9 +8,9 @@ The manifest lists `interfaces` and `blocks` as `{ "path": "interface/ahb.json",
 
 ### Interface signals
 
-Interfaces can optionally define `parameters`, `signals`, `masterSignals`, and `slaveSignals`; definitions without them remain supported. Each signal has a unique HDL identifier `name`, an `input` or `output` direction, and a `width` (a positive integer or a nonempty HDL expression string). Parameters use the same `{ "type": "int", "value": "32" }` format as block parameters. Expressions and parameter values are stored as written, not evaluated or checked against a specific HDL.
+Interfaces can optionally define `parameters`, `signals`, `masterSignals`, and `slaveSignals`; definitions without them remain supported. Each signal has a unique HDL identifier `name`, an `input`, `output`, or `inout` direction, and a `width` (a positive integer or a nonempty HDL expression string). Parameters use the same `{ "type": "int", "value": "32" }` format as block parameters. Expressions and parameter values are stored as written, not evaluated or checked against a specific HDL.
 
-The `signals` directions are relative to the master; the slave uses the opposite direction. `masterSignals` and `slaveSignals` are role-specific and use the specified direction directly. Names must not repeat within a list or between common and role-specific signals for the same role. A name can occur in both role-specific lists.
+The `signals` directions are relative to the master; the slave uses the opposite direction for `input` and `output`, while `inout` remains `inout`. `masterSignals` and `slaveSignals` are role-specific and use the specified direction directly. Names must not repeat within a list or between common and role-specific signals for the same role. A name can occur in both role-specific lists.
 
 ```json
 {
@@ -26,6 +26,10 @@ The `signals` directions are relative to the master; the slave uses the opposite
 ```
 
 The example `ahb` and `axi` interfaces describe AHB-Lite and AXI4-Lite respectively. In AHB-Lite, `HREADY` is an input on both roles, while `HSEL` and `HREADYOUT` are slave-specific; their interconnect routing is not represented by simple signal reversal. Clock and reset remain separate block ports. These definitions describe signals only: they do not validate parameter ranges, check interface compatibility, or generate RTL.
+
+The other examples describe APB4, Wishbone B4 Classic, a single-port synchronous BRAM with scalar write enable, single-select SPI, basic UART without flow control, and JTAG without optional TRST. Bus clocks and resets are separate block ports; SPI `SCLK` and JTAG `TCK` are included. UART `TX` and `RX` name the master-to-slave and slave-to-master wires, respectively; the slave-side `TX` is its receive input and `RX` is its transmit output. Wishbone `ADR` is a raw address with addressing granularity determined by the connected implementation.
+
+GPIO and I2C use `inout` for physical shared pins. I3C models controller-driven `SCL` and bidirectional `SDA`; this basic model does not describe I2C-compatible clock stretching or open-drain/push-pull drive control. These examples do not specify pull-ups, pin buffers, electrical behavior, or protocol-specific timing. RTL generation rejects any used interface with `inout` signals until bidirectional wiring is supported.
 
 ## RTL generation
 

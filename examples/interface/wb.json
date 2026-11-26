@@ -1,5 +1,19 @@
 {
   "version": "0.1.0",
   "name": "wb",
-  "label": "Wishbone"
+  "label": "Wishbone",
+  "parameters": {
+    "ADDR_WIDTH": { "type": "int", "value": "32" },
+    "DATA_WIDTH": { "type": "int", "value": "32" }
+  },
+  "signals": [
+    { "name": "ADR", "direction": "output", "width": "ADDR_WIDTH" },
+    { "name": "DAT_W", "direction": "output", "width": "DATA_WIDTH" },
+    { "name": "DAT_R", "direction": "input", "width": "DATA_WIDTH" },
+    { "name": "SEL", "direction": "output", "width": "DATA_WIDTH / 8" },
+    { "name": "WE", "direction": "output", "width": 1 },
+    { "name": "CYC", "direction": "output", "width": 1 },
+    { "name": "STB", "direction": "output", "width": 1 },
+    { "name": "ACK", "direction": "input", "width": 1 }
+  ]
 }

@@ -1,5 +1,11 @@
 {
   "version": "0.1.0",
   "name": "gpio",
-  "label": "GPIO"
+  "label": "GPIO",
+  "parameters": {
+    "DATA_WIDTH": { "type": "int", "value": "32" }
+  },
+  "signals": [
+    { "name": "GPIO", "direction": "inout", "width": "DATA_WIDTH" }
+  ]
 }

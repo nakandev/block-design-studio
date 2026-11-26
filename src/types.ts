@@ -30,7 +30,7 @@ export interface InterfaceDefinition {
 
 export interface InterfaceSignal {
   name: string
-  direction: PortDirection
+  direction: PortDirection | 'inout'
   width: number | string
 }
 

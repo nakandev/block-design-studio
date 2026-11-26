@@ -1,5 +1,11 @@
 {
   "version": "0.1.0",
   "name": "spi",
-  "label": "SPI"
+  "label": "SPI",
+  "signals": [
+    { "name": "SCLK", "direction": "output", "width": 1 },
+    { "name": "CS_N", "direction": "output", "width": 1 },
+    { "name": "MOSI", "direction": "output", "width": 1 },
+    { "name": "MISO", "direction": "input", "width": 1 }
+  ]
 }

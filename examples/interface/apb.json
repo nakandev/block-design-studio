@@ -1,5 +1,21 @@
 {
   "version": "0.1.0",
   "name": "apb",
-  "label": "APB"
+  "label": "APB",
+  "parameters": {
+    "ADDR_WIDTH": { "type": "int", "value": "32" },
+    "DATA_WIDTH": { "type": "int", "value": "32" }
+  },
+  "signals": [
+    { "name": "PADDR", "direction": "output", "width": "ADDR_WIDTH" },
+    { "name": "PSEL", "direction": "output", "width": 1 },
+    { "name": "PENABLE", "direction": "output", "width": 1 },
+    { "name": "PWRITE", "direction": "output", "width": 1 },
+    { "name": "PWDATA", "direction": "output", "width": "DATA_WIDTH" },
+    { "name": "PSTRB", "direction": "output", "width": "DATA_WIDTH / 8" },
+    { "name": "PPROT", "direction": "output", "width": 3 },
+    { "name": "PRDATA", "direction": "input", "width": "DATA_WIDTH" },
+    { "name": "PREADY", "direction": "input", "width": 1 },
+    { "name": "PSLVERR", "direction": "input", "width": 1 }
+  ]
 }
