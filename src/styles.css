@@ -72,14 +72,21 @@ button { cursor: pointer; }
 .port-menu button { border: 1px solid #d6dde8; border-radius: 5px; background: #fff; color: #334155; padding: 7px; text-align: left; }
 .port-menu button:hover, .port-menu button:focus-visible { background: #eff6ff; }
 .port-menu button:disabled { cursor: not-allowed; opacity: .5; }
-.port-menu-title { color: #64748b; font-weight: 700; }
+.port-submenu-anchor { position: relative; }
+.port-submenu-trigger { width: 100%; display: flex; justify-content: space-between; gap: 8px; }
+.port-submenu { position: fixed; z-index: 1; width: min(320px, 100vw); max-height: min(260px, 100vh); display: flex; flex-direction: column; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(15, 23, 42, .25); }
+.port-submenu-back { display: none; }
 .port-menu-list { min-height: 0; overflow-y: auto; display: grid; gap: 4px; }
 .port-menu-list button { overflow-wrap: anywhere; }
 .port-menu-list small { display: block; color: #64748b; }
 :root[data-theme='dark'] .port-menu { background: #111827; border-color: #475569; }
+:root[data-theme='dark'] .port-submenu { background: #111827; border-color: #475569; }
 :root[data-theme='dark'] .port-menu button { background: #1f2937; color: #e5e7eb; border-color: #475569; }
 :root[data-theme='dark'] .port-menu button:hover, :root[data-theme='dark'] .port-menu button:focus-visible { background: #334155; }
-:root[data-theme='dark'] .port-menu-title, :root[data-theme='dark'] .port-menu-list small { color: #9ca3af; }
+:root[data-theme='dark'] .port-menu-list small { color: #9ca3af; }
+@media (max-width: 639px) {
+  .port-submenu-back { display: block; margin-bottom: 6px; }
+}
 .input-handle { background: #2563eb !important; }
 .output-handle { background: #059669 !important; }
 .interface-handle.input-handle { background: #7c3aed !important; }

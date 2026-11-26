@@ -140,6 +140,8 @@ export default function App() {
   const canvasRef = useRef<HTMLElement | null>(null)
   const [connectingPort, setConnectingPort] = useState<PortRef | null>(null)
   const [portMenu, setPortMenu] = useState<(PortRef & { x: number; y: number }) | null>(null)
+  const [candidatesOpen, setCandidatesOpen] = useState(false)
+  const candidatesButtonRef = useRef<HTMLButtonElement | null>(null)
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(() => new Set())
   const [, renderHistory] = useState(0)
   const designFileRef = useRef<HTMLInputElement>(null)
@@ -232,12 +234,16 @@ export default function App() {
   useEffect(() => {
     if (!portMenu) return
     const close = () => setPortMenu(null)
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (candidatesOpen) { event.stopPropagation(); setCandidatesOpen(false); candidatesButtonRef.current?.focus() }
+      else close()
+    }
     window.addEventListener('pointerdown', close)
     window.addEventListener('keydown', escape)
     window.addEventListener('resize', close)
     return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', escape); window.removeEventListener('resize', close) }
-  }, [portMenu])
+  }, [portMenu, candidatesOpen])
 
   const edgeTypeLabel = (key: string) => {
     if (key.startsWith('interface:')) {
@@ -284,6 +290,7 @@ export default function App() {
     if (!handle?.dataset.nodeid || !handle.dataset.handleid) return
     event.preventDefault()
     event.stopPropagation()
+    setCandidatesOpen(false)
     setPortMenu({ nodeId: handle.dataset.nodeid, portId: handle.dataset.handleid, x: Math.max(0, Math.min(event.clientX, window.innerWidth - 320)), y: Math.max(0, Math.min(event.clientY, window.innerHeight - 260)) })
   }
   const addConnectedExternal = (ref: PortRef) => {
@@ -560,9 +567,14 @@ export default function App() {
     </section>}
     {portMenu && <div className="port-menu" role="dialog" aria-label="Port connections" style={{ left: portMenu.x, top: portMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
       <strong>{nodes.find((node) => node.id === portMenu.nodeId)?.data.label} · {nodes.find((node) => node.id === portMenu.nodeId)?.data.ports.find((port) => port.id === portMenu.portId)?.name}</strong>
-      <button disabled={edges.some((edge) => edge.target === portMenu.nodeId && edge.targetHandle === portMenu.portId)} title={edges.some((edge) => edge.target === portMenu.nodeId && edge.targetHandle === portMenu.portId) ? 'Input is already connected' : undefined} onClick={() => { addConnectedExternal(portMenu); setPortMenu(null) }}>Add connected external port</button>
-      <div className="port-menu-title">Connection candidates</div>
-      <div className="port-menu-list">{candidates.length ? candidates.map(({ node, port, connection }) => <button key={JSON.stringify([node.id, port.id])} onClick={() => { onConnect(connection); setPortMenu(null) }}>{node.data.label} · {port.name} <small>{node.data.kind}</small></button>) : <span>No compatible available ports</span>}</div>
+      <button onMouseEnter={() => setCandidatesOpen(false)} disabled={edges.some((edge) => edge.target === portMenu.nodeId && edge.targetHandle === portMenu.portId)} title={edges.some((edge) => edge.target === portMenu.nodeId && edge.targetHandle === portMenu.portId) ? 'Input is already connected' : undefined} onClick={() => { addConnectedExternal(portMenu); setPortMenu(null) }}>Add connected external port</button>
+      <div className="port-submenu-anchor">
+        <button ref={candidatesButtonRef} className="port-submenu-trigger" aria-expanded={candidatesOpen} aria-controls="connection-candidates" onMouseEnter={() => setCandidatesOpen(true)} onClick={() => setCandidatesOpen(true)} onKeyDown={(event) => { if (event.key === 'ArrowRight') { event.preventDefault(); setCandidatesOpen(true); requestAnimationFrame(() => document.getElementById('connection-candidates')?.querySelector<HTMLButtonElement>('button:not(.port-submenu-back)')?.focus()) } }}>Connection candidates <span aria-hidden="true">▸</span></button>
+        {candidatesOpen && <div id="connection-candidates" className="port-submenu" aria-label="Connection candidates" style={{ left: window.innerWidth < 640 ? 0 : portMenu.x + 640 > window.innerWidth ? Math.max(0, portMenu.x - 320) : portMenu.x + 320, top: portMenu.y }}>
+          <button className="port-submenu-back" onClick={() => { setCandidatesOpen(false); candidatesButtonRef.current?.focus() }}>← Back</button>
+          <div className="port-menu-list">{candidates.length ? candidates.map(({ node, port, connection }) => <button key={JSON.stringify([node.id, port.id])} onClick={() => { onConnect(connection); setPortMenu(null) }}>{node.data.label} · {port.name} <small>{node.data.kind}</small></button>) : <span>No compatible available ports</span>}</div>
+        </div>}
+      </div>
     </div>}
     <footer className="statusbar"><span role="status">{status}</span><span>{nodes.length} nodes · {edges.length} connections</span></footer>
     {addressMapNode && <AddressMapEditor key={addressMapNode.id} node={addressMapNode} nodes={nodes} edges={edges} onCancel={() => setAddressMapNodeId(null)} onApply={applyAddressMap} />}

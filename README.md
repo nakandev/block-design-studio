@@ -57,7 +57,7 @@ The design also includes `definitions.interfaces` and `definitions.blocks` listi
 
 Select a block and use **Port layout** in Properties to choose vertical ports (inputs left, outputs right) or horizontal ports (inputs top, outputs bottom). The selection is saved with the design; existing designs default to vertical. Single-port external nodes retain their usual layout.
 
-Dragging or clicking a port highlights compatible available connection targets. Right-click a port or its handle to show connection candidates; select one to connect, or choose **Add connected external port** to create and connect a matching external port. Already connected inputs are excluded. Creating an external port and its connection is one undoable operation.
+Dragging or clicking a port highlights compatible available connection targets. Right-click a port or its handle and open **Connection candidates** to select a connection, or choose **Add connected external port** to create and connect a matching external port. Already connected inputs are excluded. Creating an external port and its connection is one undoable operation.
 
 - `clock`: clock ports connect only to clock ports and do not compare width.
 - `reset`: reset ports connect only to reset ports and do not compare width.
