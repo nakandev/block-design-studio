@@ -1,1 +1,1 @@
-import ExternalOutputNodeView from './ExternalOutputNode'
+import ExternalOutputNodeView from './ExternalPortNode'

@@ -41,10 +41,13 @@ export function SubdesignPreview({ design }: { design: Subdesign }) {
       if (sourceIndex < 0 || targetIndex < 0) return null
       return <line key={edge.id} x1={source.position.x + width} y1={source.position.y + 59 + sourceIndex * 18} x2={target.position.x} y2={target.position.y + 59 + targetIndex * 18} className="subdesign-preview-edge" />
     })}
-    {design.nodes.map((node) => <g key={node.id} transform={`translate(${node.position.x} ${node.position.y})`}>
-      <rect width={width} height={nodeHeight(node)} rx="6" className={`subdesign-preview-box${node.type?.startsWith('external') ? ' subdesign-preview-boundary' : ''}`} />
+    {design.nodes.map((node) => node.type?.startsWith('external') ? <g key={node.id} transform={`translate(${node.position.x} ${node.position.y})`} className="subdesign-preview-boundary">
+      <path d={node.data.ports[0]?.direction === 'output' ? `M ${width - 10} 53 L ${width} 59 L ${width - 10} 65 Z` : 'M 0 53 L 10 59 L 0 65 Z'} className="subdesign-preview-boundary-arrow" />
+      <text x={node.data.ports[0]?.direction === 'output' ? width - 16 : 16} y="63" textAnchor={node.data.ports[0]?.direction === 'output' ? 'end' : 'start'} className="subdesign-preview-label">#{boundaries.indexOf(node) + 1} {node.data.label}</text>
+    </g> : <g key={node.id} transform={`translate(${node.position.x} ${node.position.y})`}>
+      <rect width={width} height={nodeHeight(node)} rx="6" className="subdesign-preview-box" />
       <text x="8" y="16" className="subdesign-preview-kind">{node.data.kind}</text>
-      <text x="8" y="35" className="subdesign-preview-label">{boundaries.includes(node) ? `#${boundaries.indexOf(node) + 1} ` : ''}{node.data.label}</text>
+      <text x="8" y="35" className="subdesign-preview-label">{node.data.label}</text>
       {node.data.ports.map((port, index) => <g key={port.id}>
         <circle cx={port.direction === 'input' ? 0 : width} cy={59 + index * 18} r="3" className="subdesign-preview-port" />
         <text x={port.direction === 'input' ? 8 : width - 8} y={63 + index * 18} textAnchor={port.direction === 'input' ? 'start' : 'end'} className="subdesign-preview-kind">{port.name}</text>

@@ -7,10 +7,7 @@ import {
 } from '@xyflow/react'
 import BlockNodeView, { type BlockNode } from './BlockNode'
 import SubdesignNodeView, { SubdesignViewContext } from './SubdesignNode'
-import ExternalInputNodeView from './ExternalInputNode'
-import ExternalOutputNodeView from './ExternalOutputNode'
-import ExternalAxiNodeView from './ExternalAxiNode'
-import ExternalSignalNodeView from './ExternalSignalNode'
+import ExternalPortNodeView from './ExternalPortNode'
 import AddressMapEditor from './AddressMapEditor'
 import BlockSettingsEditor from './BlockSettingsEditor'
 import GeneratedPortsEditor from './GeneratedPortsEditor'
@@ -43,16 +40,16 @@ const defaultTemplates: BlockTemplate[] = [
 const nodeTypes: NodeTypes = {
   block: BlockNodeView,
   subdesign: SubdesignNodeView,
-  externalInput: ExternalInputNodeView,
-  externalOutput: ExternalOutputNodeView,
-  externalInterfaceMaster: ExternalAxiNodeView,
-  externalInterfaceSlave: ExternalAxiNodeView,
-  externalAxiMaster: ExternalAxiNodeView,
-  externalAxiSlave: ExternalAxiNodeView,
-  externalI2cMaster: ExternalAxiNodeView,
-  externalI2cSlave: ExternalAxiNodeView,
-  externalClock: ExternalSignalNodeView,
-  externalReset: ExternalSignalNodeView,
+  externalInput: ExternalPortNodeView,
+  externalOutput: ExternalPortNodeView,
+  externalInterfaceMaster: ExternalPortNodeView,
+  externalInterfaceSlave: ExternalPortNodeView,
+  externalAxiMaster: ExternalPortNodeView,
+  externalAxiSlave: ExternalPortNodeView,
+  externalI2cMaster: ExternalPortNodeView,
+  externalI2cSlave: ExternalPortNodeView,
+  externalClock: ExternalPortNodeView,
+  externalReset: ExternalPortNodeView,
 }
 const edgeTypes = { orthogonal: OrthogonalEdge }
 interface Snapshot { nodes: BlockNode[]; edges: Edge[]; restore: ParentConnectionImpact[] }
@@ -376,7 +373,7 @@ export default function App() {
 
   const openPortMenu = (event: React.MouseEvent<HTMLElement>) => {
     const element = event.target instanceof Element ? event.target : null
-    const row = element?.closest('.port-row, .external-input-port, .external-output-port, .external-axi-port, .external-signal-port')
+    const row = element?.closest('.port-row, .external-port')
     const handle = (element?.closest('.react-flow__handle') ?? row?.querySelector('.react-flow__handle')) as HTMLElement | null
     if (!handle?.dataset.nodeid || !handle.dataset.handleid) return
     event.preventDefault()

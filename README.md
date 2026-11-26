@@ -63,6 +63,8 @@ The design also includes `definitions.interfaces` and `definitions.blocks` listi
 
 ## Ports
 
+External ports are displayed as a name and a direction marker without a node frame. Hover to see the port type or width; select the port to edit its properties.
+
 Select a block and use **Port layout** in Properties to choose vertical ports (inputs left, outputs right) or horizontal ports (inputs top, outputs bottom). The selection is saved with the design; existing designs default to vertical. Single-port external nodes retain their usual layout.
 
 Dragging or clicking a port highlights compatible available connection targets. Right-click a port or its handle and open **Connection candidates** to select a connection, or choose **Add connected external port** to create and connect a matching external port. Already connected inputs are excluded. Creating an external port and its connection is one undoable operation.

@@ -27,6 +27,7 @@ test('preview renders boundary nodes and connects the specified internal ports',
   }))
   assert.match(markup, /subdesign-preview-boundary/)
   assert.match(markup, />#1 boundary</)
+  assert.doesNotMatch(markup, /External/)
   assert.match(markup, />second</)
   assert.match(markup, /x1="156" y1="59" x2="300" y2="77"/)
 })

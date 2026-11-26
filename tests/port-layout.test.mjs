@@ -5,11 +5,36 @@ import { Position, ReactFlow } from '@xyflow/react'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-let server, routePositionedEdge, BlockNodeView
+let server, routePositionedEdge, BlockNodeView, ExternalPortNodeView
 before(async () => {
   server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
   ;({ routePositionedEdge } = await server.ssrLoadModule('/src/OrthogonalEdge.tsx'))
   ;({ default: BlockNodeView } = await server.ssrLoadModule('/src/BlockNode.tsx'))
+  ;({ default: ExternalPortNodeView } = await server.ssrLoadModule('/src/ExternalPortNode.tsx'))
+})
+
+test('external ports render a single label with handles on the correct side', () => {
+  const cases = [
+    ['externalInput', 'output', undefined, 'signal', 'right'],
+    ['externalOutput', 'input', undefined, 'signal', 'left'],
+    ['externalClock', 'output', 'clock', 'clock', 'right'],
+    ['externalReset', 'input', 'reset', 'reset', 'left'],
+    ['externalInterfaceSlave', 'output', 'axi.slave', 'interface', 'right'],
+    ['externalInterfaceMaster', 'input', 'axi.master', 'interface', 'left'],
+  ]
+  for (const [type, direction, portType, kind, side] of cases) {
+    const data = { label: 'external_name', kind: 'External Kind', parameters: {}, ports: [{ id: 'port', name: 'port', direction, ...(portType ? { type: portType } : { width: 8 }) }] }
+    const markup = renderToStaticMarkup(React.createElement(ReactFlow, {
+      nodes: [{ id: 'external', type, position: { x: 0, y: 0 }, data, width: 120, height: 28 }],
+      edges: [], nodeTypes: { [type]: ExternalPortNodeView }, width: 800, height: 600,
+    }))
+    assert.match(markup, new RegExp(`external-port ${direction === 'output' ? 'source' : 'target'} ${kind}`))
+    assert.match(markup, new RegExp(`react-flow__handle-${side}`))
+    assert.match(markup, new RegExp(`external-port-handle ${direction === 'output' ? 'source' : 'target'} connectable`))
+    assert.match(markup, /data-handleid="port"/)
+    assert.equal((markup.match(/>external_name</g) ?? []).length, 1)
+    assert.doesNotMatch(markup, /external-(?:input|output|axi|signal)-header/)
+  }
 })
 after(async () => { await server?.close() })
 
