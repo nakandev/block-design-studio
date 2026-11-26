@@ -63,9 +63,8 @@ function edgeTypeKey(edge: Edge, nodesById: Map<string, BlockNode>): string {
 }
 
 export function validateDefinitions(value: unknown, sources?: DefinitionSources): DefinitionSet {
-  const document = Array.isArray(value) ? { interfaces: defaultInterfaces, blocks: value } : value
-  if (!document || typeof document !== 'object') throw new Error('Definitions must be an object containing interfaces and blocks')
-  const raw = document as Record<string, unknown>
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Definitions must be an object containing interfaces and blocks')
+  const raw = value as Record<string, unknown>
   if (!Array.isArray(raw.interfaces) || !Array.isArray(raw.blocks)) throw new Error('Definitions must contain interfaces and blocks arrays')
   if ([...raw.interfaces, ...raw.blocks].some((entry) => entry && typeof entry === 'object' && 'path' in entry)) {
     throw new Error('Select the containing folder with Load definitions folder to load a manifest')
@@ -136,7 +135,6 @@ export default function App() {
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(() => new Set())
   const [, renderHistory] = useState(0)
   const designFileRef = useRef<HTMLInputElement>(null)
-  const definitionsFileRef = useRef<HTMLInputElement>(null)
   const definitionsFolderRef = useRef<HTMLInputElement | null>(null)
   const nodesRef = useRef(nodes)
   const edgesRef = useRef(edges)
@@ -387,10 +385,10 @@ export default function App() {
     }).length
     return `${count ? `; ${count} existing block(s) retain fixed ports because their ports do not match the definition` : ''}${conflicts ? `; ${conflicts} block(s) retain their original definition because the loaded source differs` : ''}`
   }
-  const loadDefinitions = async (read: () => Promise<{ value: unknown; sources?: DefinitionSources }>) => {
+  const loadDefinitions = async (files: File[]) => {
     try {
-      const { value, sources } = await read()
-      const parsed = validateDefinitions(value, sources)
+      const definitions = await loadDefinitionFolder(files)
+      const parsed = validateDefinitions(definitions, definitions.sources)
       const before = snapshot()
       const next = mergeDefinitions(nodesRef.current, parsed.blocks)
       if (next.some((node, index) => node !== nodesRef.current[index])) { replace(next, edgesRef.current); record(before) }
@@ -440,7 +438,7 @@ export default function App() {
 
   const addressMapNode = nodes.find((node) => node.id === addressMapNodeId)
   return <main className="app-shell">
-    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFileRef.current?.click()}>Load definitions</button><input ref={definitionsFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadDefinitions(async () => ({ value: JSON.parse(await file.text()) })); event.target.value = '' }} /><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(async () => { const value = await loadDefinitionFolder(files); return { value, sources: value.sources } }); event.target.value = '' }} /><button onClick={saveDesign}>Save</button><button onClick={() => void generateRTL()} disabled={generatingRTL}>{generatingRTL ? 'Generating RTL…' : 'Generate RTL'}</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(files); event.target.value = '' }} /><button onClick={saveDesign}>Save</button><button onClick={() => void generateRTL()} disabled={generatingRTL}>{generatingRTL ? 'Generating RTL…' : 'Generate RTL'}</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
     <div className="workspace">
       <aside className="sidebar panel">
         <details className="wire-filter" open>

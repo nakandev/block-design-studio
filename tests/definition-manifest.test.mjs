@@ -18,13 +18,12 @@ const iface = { version: '0.1.0', name: 'ahb', label: 'AHB' }
 const block = { version: '0.1.0', kind: 'Bus', label: 'Bus', bus: { interface: 'ahb' }, ports: [{ id: 'm', name: 'm', type: 'ahb.master' }] }
 const files = () => [file('block-definitions.json', manifest), file('interface/ahb.json', iface), file('block/bus.json', block)]
 
-test('resolves and validates versioned definitions and preserves old formats', async () => {
+test('resolves and validates versioned definitions', async () => {
   const parsed = validateDefinitions(await loadDefinitionFolder(files()))
   assert.equal(parsed.interfaces[0].name, 'ahb')
   assert.equal(parsed.blocks[0].bus.interface, 'ahb')
   assert.equal(parsed.blocks[0].ports[0].direction, 'output')
-  assert.equal(validateDefinitions([block]).blocks[0].kind, 'Bus')
-  assert.equal(validateDefinitions({ interfaces: [iface], blocks: [block] }).blocks[0].kind, 'Bus')
+  assert.throws(() => validateDefinitions([block]), /must be an object/)
 })
 
 test('reports missing files, bad versions, duplicate and unsafe references', async () => {
