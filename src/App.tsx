@@ -134,8 +134,7 @@ export default function App() {
   const [status, setStatus] = useState('Ready')
   const [generatingRTL, setGeneratingRTL] = useState(false)
   const [validationOpen, setValidationOpen] = useState(false)
-  const [validating, setValidating] = useState(false)
-  const [validation, setValidation] = useState<{ key: string; issues: ValidationIssue[]; rtlError?: string } | null>(null)
+  const [validation, setValidation] = useState<{ key: string; issues: ValidationIssue[] } | null>(null)
   const flowRef = useRef<ReactFlowInstance<BlockNode, Edge> | null>(null)
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(() => new Set())
   const [, renderHistory] = useState(0)
@@ -412,31 +411,11 @@ export default function App() {
     const savedNodes = nodesRef.current.map((node) => ({ ...node, data: migrateInterfaceSources(node.data) }))
     return { version: 1, name: designName, nodes: savedNodes, edges: edgesRef.current, definitions: designDefinitions(savedNodes) }
   }
-  const runValidation = async () => {
+  const runValidation = () => {
     const key = validationKey
-    const issues = validateDesign(nodesRef.current, edgesRef.current)
+    const issues = validateDesign(nodesRef.current, edgesRef.current, templates, interfaces)
     setValidationOpen(true)
-    setValidating(true)
     setValidation({ key, issues })
-    try {
-      const response = await fetch('/api/rtl/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ design: designDocument(), interfaces, blocks: templates }),
-      })
-      if (!response.ok) throw new Error(`Backend returned HTTP ${response.status}`)
-      const result: unknown = await response.json()
-      if (!result || typeof result !== 'object' || !('issues' in result) || !Array.isArray(result.issues)
-        || !result.issues.every((issue: unknown) => issue && typeof issue === 'object' && 'message' in issue && typeof issue.message === 'string' && (!('nodeId' in issue) || typeof issue.nodeId === 'string'))) {
-        throw new Error('Invalid response from RTL validation')
-      }
-      const rtlIssues: ValidationIssue[] = result.issues.map((issue: { message: string; nodeId?: string }) => ({ severity: 'error', message: `RTL: ${issue.message}`, ...(issue.nodeId ? { nodeId: issue.nodeId } : {}) }))
-      setValidation({ key, issues: [...issues.filter((issue) => issue.severity === 'error'), ...rtlIssues, ...issues.filter((issue) => issue.severity === 'warning')] })
-    } catch (error) {
-      setValidation({ key, issues, rtlError: error instanceof Error ? error.message : String(error) })
-    } finally {
-      setValidating(false)
-    }
   }
   const focusIssue = (issue: ValidationIssue) => {
     const edge = issue.edgeId ? edgesRef.current.find((item) => item.id === issue.edgeId) : undefined
@@ -484,7 +463,7 @@ export default function App() {
 
   const addressMapNode = nodes.find((node) => node.id === addressMapNodeId)
   return <main className={`app-shell${validationOpen ? ' validation-open' : ''}`}>
-    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(files); event.target.value = '' }} /><button onClick={() => void runValidation()} disabled={validating}>Validate Design</button><button onClick={() => void generateRTL()} disabled={generatingRTL}>{generatingRTL ? 'Generating RTL…' : 'Generate RTL'}</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark">BD</div><strong>Block Design Studio</strong></div><input className="design-name" value={designName} onChange={(event) => setDesignName(event.target.value)} aria-label="Design name" /><div className="top-actions"><button onClick={undo} disabled={!pastRef.current.length} title="Undo">↶</button><button onClick={redo} disabled={!futureRef.current.length} title="Redo">↷</button><button onClick={() => definitionsFolderRef.current?.click()}>Load definitions folder</button><input ref={(element) => { definitionsFolderRef.current = element; if (element) element.setAttribute('webkitdirectory', '') }} type="file" multiple hidden onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void loadDefinitions(files); event.target.value = '' }} /><button onClick={runValidation}>Validate Design</button><button onClick={() => void generateRTL()} disabled={generatingRTL}>{generatingRTL ? 'Generating RTL…' : 'Generate RTL'}</button><button className="primary" onClick={exportDesign}>Export JSON</button><button onClick={() => designFileRef.current?.click()}>Open</button><input ref={designFileRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void openDesign(file); event.target.value = '' }} /><select className="theme-select" aria-label="Color theme" value={themePreference} onChange={(event) => { const preference = event.target.value; if (preference === 'system' || preference === 'light' || preference === 'dark') changeThemePreference(preference) }}><option value="system">Theme: System</option><option value="light">Theme: Light</option><option value="dark">Theme: Dark</option></select></div></header>
     <div className="workspace">
       <aside className="sidebar panel">
         <details className="wire-filter" open>
@@ -518,19 +497,18 @@ export default function App() {
         <strong>Design Validation</strong>
         {validation && <span>{validation.issues.filter((issue) => issue.severity === 'error').length} errors · {validation.issues.filter((issue) => issue.severity === 'warning').length} warnings</span>}
         {validation && validation.key !== validationKey && <strong className="validation-stale">Design or definitions changed — revalidate</strong>}
-        <button onClick={() => void runValidation()} disabled={validating}>{validating ? 'Validating…' : 'Revalidate'}</button>
+        <button onClick={runValidation}>Revalidate</button>
         <button onClick={() => setValidationOpen(false)} aria-label="Close validation">×</button>
       </div>
       <div className="validation-results" aria-live="polite">
-        {validation?.rtlError && <p className="validation-error">RTL validation unavailable: {validation.rtlError}</p>}
-        {validation && !validating && !validation.rtlError && validation.issues.length === 0 && <p>No issues found.</p>}
+        {validation && validation.issues.length === 0 && <p>No issues found.</p>}
         {validation?.issues.map((issue, index) => <div className="validation-row" key={index}>
           <strong className={issue.severity === 'error' ? 'validation-error' : 'validation-warning'}>{issue.severity === 'error' ? 'Error' : 'Warning'}</strong>
           {issue.nodeId || issue.edgeId
             ? <button className="validation-link" disabled={validation.key !== validationKey} onClick={() => focusIssue(issue)}>{issue.message}</button>
             : <span>{issue.message}</span>}
         </div>)}
-        <p className="validation-note">RTL checks report the first generation error; revalidate after fixing it.</p>
+        <p className="validation-note">Design validation does not guarantee RTL generation or compilation.</p>
       </div>
     </section>}
     <footer className="statusbar"><span role="status">{status}</span><span>{nodes.length} nodes · {edges.length} connections</span></footer>
