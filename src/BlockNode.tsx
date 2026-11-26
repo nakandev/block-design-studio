@@ -10,7 +10,7 @@ function portClass(port: BlockPort): string {
   return port.type ? ' interface-handle' : ''
 }
 
-function PortRow({ port, side, horizontal }: { port: BlockPort; side: 'input' | 'output'; horizontal: boolean }) {
+export function PortRow({ port, side, horizontal }: { port: BlockPort; side: 'input' | 'output'; horizontal: boolean }) {
   const input = side === 'input'
   return (
     <div className={`port-row ${input ? 'input-row' : 'output-row'}`}>

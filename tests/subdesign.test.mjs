@@ -30,6 +30,21 @@ test('preview renders boundary nodes and connects the specified internal ports',
   assert.match(markup, />second</)
   assert.match(markup, /x1="156" y1="59" x2="300" y2="77"/)
 })
+
+test('preview sizes itself to the design and caps large layouts without cropping', () => {
+  const first = external('first', 'output')
+  const last = external('last', 'input')
+  last.position = { x: 2000, y: 1200 }
+  const markup = renderToStaticMarkup(React.createElement(SubdesignPreview, {
+    design: { id: 'large', name: 'Large', nodes: [first, last], edges: [] },
+  }))
+  const match = markup.match(/width="(\d+)" height="(\d+)" viewBox="([^"]+)"/)
+  assert.ok(match)
+  assert.ok(Number(match[1]) <= 820 && Number(match[2]) <= 520)
+  const [x, y, width, height] = match[3].split(' ').map(Number)
+  assert.ok(x < 0 && y < 0 && x + width > 2156 && y + height > 1268)
+  assert.match(markup, />#2 last</)
+})
 after(async () => { await server?.close() })
 
 const external = (id, direction, width = 8) => ({
