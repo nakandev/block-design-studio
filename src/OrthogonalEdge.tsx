@@ -1,4 +1,4 @@
-import { BaseEdge, useEdges, useNodes, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, Position, useEdges, useNodes, type EdgeProps } from '@xyflow/react'
 import type { Edge } from '@xyflow/react'
 
 type Point = { x: number; y: number }
@@ -102,6 +102,45 @@ function routeEdge(source: Point, target: Point, obstacles: Obstacle[], preferre
   return best
 }
 
+export function routePositionedEdge(source: Point, target: Point, sourcePosition: Position, targetPosition: Position, obstacles: Obstacle[], preferredTrackX: number): Point[] {
+  const offset = (point: Point, position: Position): Point => ({
+    x: point.x + (position === Position.Right ? STUB : position === Position.Left ? -STUB : 0),
+    y: point.y + (position === Position.Bottom ? STUB : position === Position.Top ? -STUB : 0),
+  })
+  const start = offset(source, sourcePosition)
+  const end = offset(target, targetPosition)
+  const xs = new Set([start.x, end.x, preferredTrackX])
+  const ys = new Set([start.y, end.y, (start.y + end.y) / 2])
+  for (const obstacle of obstacles) {
+    xs.add(obstacle.left - CLEARANCE)
+    xs.add(obstacle.right + CLEARANCE)
+    ys.add(obstacle.top - CLEARANCE)
+    ys.add(obstacle.bottom + CLEARANCE)
+  }
+  let best: Point[] | undefined
+  let bestScore = Number.POSITIVE_INFINITY
+  for (const x of xs) for (const y of ys) {
+    const candidates = [
+      [start, { x, y: start.y }, { x, y: end.y }, end],
+      [start, { x: start.x, y }, { x: end.x, y }, end],
+      [start, { x, y: start.y }, { x, y }, { x: end.x, y }, end],
+      [start, { x: start.x, y }, { x, y }, { x, y: end.y }, end],
+    ]
+    for (const candidate of candidates) {
+      const middle = simplify(candidate)
+      const segments = toSegments(middle)
+      if (segments.some((segment) => obstacles.some((obstacle) => intersectsObstacle(segment.a, segment.b, obstacle)))) continue
+      const points = simplify([source, ...middle, target])
+      const length = toSegments(points).reduce((total, segment) => total + Math.abs(segment.b.x - segment.a.x) + Math.abs(segment.b.y - segment.a.y), 0)
+      const score = length + Math.max(0, points.length - 2) * 30 + Math.abs(x - preferredTrackX)
+      if (score < bestScore) { best = points; bestScore = score }
+    }
+  }
+  if (best) return best
+  const outsideY = Math.min(start.y, end.y, ...obstacles.map((obstacle) => obstacle.top)) - CLEARANCE * 2
+  return simplify([source, start, { x: start.x, y: outsideY }, { x: end.x, y: outsideY }, end, target])
+}
+
 function toPath(points: Point[]): string {
   return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
 }
@@ -123,7 +162,16 @@ export default function OrthogonalEdge(props: EdgeProps) {
   const siblingIndex = Math.max(0, siblings.findIndex((edge) => edge.id === props.id))
   const centerX = (props.sourceX + props.targetX) / 2
   const preferredTrackX = centerX + (siblingIndex - (siblings.length - 1) / 2) * LANE_GAP
-  const path = routeEdge({ x: props.sourceX, y: props.sourceY }, { x: props.targetX, y: props.targetY }, obstacles, preferredTrackX)
+  const source = { x: props.sourceX, y: props.sourceY }
+  const target = { x: props.targetX, y: props.targetY }
+  const position = (node: typeof sourceNode): Obstacle => {
+    const width = node.measured?.width ?? node.width ?? 196
+    const height = node.measured?.height ?? node.height ?? 96
+    return { left: node.position.x - 2, right: node.position.x + width + 2, top: node.position.y - 2, bottom: node.position.y + height + 2 }
+  }
+  const path = props.sourcePosition === Position.Right && props.targetPosition === Position.Left
+    ? routeEdge(source, target, obstacles, preferredTrackX)
+    : routePositionedEdge(source, target, props.sourcePosition, props.targetPosition, [...obstacles, position(sourceNode), position(targetNode)], preferredTrackX)
 
   return <BaseEdge id={props.id} path={toPath(path)} markerEnd={props.markerEnd} markerStart={props.markerStart} style={props.style} interactionWidth={props.interactionWidth} />
 }

@@ -106,6 +106,7 @@ export interface BlockData extends Record<string, unknown> {
   label: string
   kind: string
   ports: BlockPort[]
+  portLayout?: 'vertical' | 'horizontal'
   portDefinitions?: BlockPort[]
   config?: BlockConfig
   portCounts?: Record<string, number>

@@ -10,13 +10,13 @@ function portClass(port: BlockPort): string {
   return port.type ? ' interface-handle' : ''
 }
 
-function PortRow({ port, side }: { port: BlockPort; side: 'input' | 'output' }) {
+function PortRow({ port, side, horizontal }: { port: BlockPort; side: 'input' | 'output'; horizontal: boolean }) {
   const input = side === 'input'
   return (
     <div className={`port-row ${input ? 'input-row' : 'output-row'}`}>
       <Handle
         type={input ? 'target' : 'source'}
-        position={input ? Position.Left : Position.Right}
+        position={horizontal ? (input ? Position.Top : Position.Bottom) : (input ? Position.Left : Position.Right)}
         id={port.id}
         className={`port-handle ${input ? 'input-handle' : 'output-handle'}${portClass(port)}`}
       />
@@ -28,25 +28,25 @@ function PortRow({ port, side }: { port: BlockPort; side: 'input' | 'output' }) 
 
 export default function BlockNodeView({ id, data, selected }: NodeProps<BlockNode>) {
   const updateNodeInternals = useUpdateNodeInternals()
-  useEffect(() => { updateNodeInternals(id) }, [id, data.ports, updateNodeInternals])
+  const horizontal = data.portLayout === 'horizontal'
+  useEffect(() => { updateNodeInternals(id) }, [id, data.ports, horizontal, updateNodeInternals])
+  const inputs = data.ports.filter((port) => port.direction === 'input')
+  const outputs = data.ports.filter((port) => port.direction === 'output')
   return (
-    <div className={`block-node${selected ? ' selected' : ''}`}>
+    <div className={`block-node${horizontal ? ' horizontal-ports' : ''}${selected ? ' selected' : ''}`}>
+      {horizontal && <div className="input-ports">
+        {inputs.map((port) => <PortRow key={port.id} port={port} side="input" horizontal />)}
+      </div>}
       <div className="block-node-header">
         <span className="block-kind">{data.kind}</span>
         <strong>{data.label}</strong>
       </div>
-      <div className="ports">
-        <div className="input-ports">
-          {data.ports.filter((port) => port.direction === 'input').map((port) => (
-            <PortRow key={port.id} port={port} side="input" />
-          ))}
-        </div>
-        <div className="output-ports">
-          {data.ports.filter((port) => port.direction === 'output').map((port) => (
-            <PortRow key={port.id} port={port} side="output" />
-          ))}
-        </div>
-      </div>
+      {horizontal ? <div className="output-ports">
+        {outputs.map((port) => <PortRow key={port.id} port={port} side="output" horizontal />)}
+      </div> : <div className="ports">
+        <div className="input-ports">{inputs.map((port) => <PortRow key={port.id} port={port} side="input" horizontal={false} />)}</div>
+        <div className="output-ports">{outputs.map((port) => <PortRow key={port.id} port={port} side="output" horizontal={false} />)}</div>
+      </div>}
     </div>
   )
 }
