@@ -87,7 +87,6 @@ button { cursor: pointer; }
 .danger { height: 34px; border: 1px solid #fecaca; border-radius: 6px; background: #fff; color: #dc2626; }
 .statusbar { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: #f8fafc; border-top: 1px solid #dbe2ea; color: #64748b; font-size: 11px; }
 .status-warning { color: #b45309; font-weight: 600; }
-.react-flow__minimap { border: 1px solid #dbe2ea; border-radius: 5px; }
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 170px minmax(0, 1fr) 190px; }
   .topbar { grid-template-columns: 1fr; height: auto; }
@@ -223,4 +222,3 @@ button { cursor: pointer; }
   fill: #e5e7eb;
 }
 :root[data-theme='dark'] .react-flow__controls button:hover { background: #334155; }
-:root[data-theme='dark'] .react-flow__minimap { border-color: #334155; }
