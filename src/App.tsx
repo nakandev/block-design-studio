@@ -21,6 +21,7 @@ import { validateInterfaceSignals } from './interfaceSignals'
 import { canMergeDefinition, captureInterfaceSources, designDefinitions, migrateInterfaceSources, usedInterfaces, withInterfaceSources } from './designDefinitions'
 import { designFingerprint } from './designChanges'
 import { connectionError, validateDesign, type ValidationIssue } from './designValidation'
+import { connectionFor, connectionCandidates, externalNodeFor, type PortRef } from './connectionTools'
 import { adoptPortDefinitions, expandDefinition, generatedPorts, initialPortConfiguration, migratePortConfiguration, planPortChange, validateGenerate, validatePortIds } from './generatedPorts'
 import type { AddressMap, BlockPort, BlockTemplate, DefineValue, DesignDocument, InterfacePortType, InterfaceDefinition, ParameterValue } from './types'
 
@@ -136,6 +137,9 @@ export default function App() {
   const [validationOpen, setValidationOpen] = useState(false)
   const [validation, setValidation] = useState<{ key: string; issues: ValidationIssue[] } | null>(null)
   const flowRef = useRef<ReactFlowInstance<BlockNode, Edge> | null>(null)
+  const canvasRef = useRef<HTMLElement | null>(null)
+  const [connectingPort, setConnectingPort] = useState<PortRef | null>(null)
+  const [portMenu, setPortMenu] = useState<(PortRef & { x: number; y: number }) | null>(null)
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(() => new Set())
   const [, renderHistory] = useState(0)
   const designFileRef = useRef<HTMLInputElement>(null)
@@ -217,6 +221,23 @@ export default function App() {
     const hidden = hiddenEdgeTypes.has(edgeTypesById.get(edge.id) ?? 'unknown')
     return hidden ? { ...edge, hidden: true, selected: false } : edge
   }), [edges, edgeTypesById, hiddenEdgeTypes])
+  const candidatePort = connectingPort ?? portMenu
+  const candidates = useMemo(() => candidatePort ? connectionCandidates(candidatePort, nodes, edges) : [], [candidatePort, nodes, edges])
+  useLayoutEffect(() => {
+    const keys = new Set(candidates.map(({ node, port }) => JSON.stringify([node.id, port.id])))
+    const handles = canvasRef.current?.querySelectorAll<HTMLElement>('.react-flow__handle') ?? []
+    for (const handle of handles) handle.classList.toggle('connection-candidate', keys.has(JSON.stringify([handle.dataset.nodeid, handle.dataset.handleid])))
+    return () => { for (const handle of handles) handle.classList.remove('connection-candidate') }
+  }, [candidates])
+  useEffect(() => {
+    if (!portMenu) return
+    const close = () => setPortMenu(null)
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', escape)
+    window.addEventListener('resize', close)
+    return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', escape); window.removeEventListener('resize', close) }
+  }, [portMenu])
 
   const edgeTypeLabel = (key: string) => {
     if (key.startsWith('interface:')) {
@@ -240,23 +261,49 @@ export default function App() {
   }, [getNodesById])
 
   const isValidConnection = useCallback((connection: Edge | Connection) => {
-    if (!connection.source || !connection.target || connection.source === connection.target) return false
-    const { sourceNode, targetNode } = getNodesById(connection)
-    const { source, target } = getPorts(connection)
-    return connectionError(source, target, sourceNode, targetNode) === null
-  }, [getNodesById, getPorts])
+    if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) return false
+    return connectionFor({ nodeId: connection.source, portId: connection.sourceHandle }, { nodeId: connection.target, portId: connection.targetHandle }, nodesRef.current, edgesRef.current) !== null
+  }, [])
 
   const onConnect = useCallback((connection: Connection) => {
     const { sourceNode, targetNode } = getNodesById(connection)
     const { source, target } = getPorts(connection)
     const error = connectionError(source, target, sourceNode, targetNode)
     if (error) { setStatus(error); return }
-    if (edgesRef.current.some((edge) => edge.target === connection.target && edge.targetHandle === connection.targetHandle)) { setStatus('This input port is already connected'); return }
+    if (!isValidConnection(connection)) { setStatus('Cannot connect these ports or input is already connected'); return }
     const before = snapshot()
     replace(nodesRef.current, addEdge({ ...connection, type: 'orthogonal', markerEnd: { type: MarkerType.ArrowClosed } }, edgesRef.current))
     record(before)
     setStatus('Connection created')
-  }, [getNodesById, getPorts, record, replace, snapshot])
+  }, [getNodesById, getPorts, isValidConnection, record, replace, snapshot])
+
+  const openPortMenu = (event: React.MouseEvent<HTMLElement>) => {
+    const element = event.target instanceof Element ? event.target : null
+    const row = element?.closest('.port-row, .external-input-port, .external-output-port, .external-axi-port, .external-signal-port')
+    const handle = (element?.closest('.react-flow__handle') ?? row?.querySelector('.react-flow__handle')) as HTMLElement | null
+    if (!handle?.dataset.nodeid || !handle.dataset.handleid) return
+    event.preventDefault()
+    event.stopPropagation()
+    setPortMenu({ nodeId: handle.dataset.nodeid, portId: handle.dataset.handleid, x: Math.max(0, Math.min(event.clientX, window.innerWidth - 320)), y: Math.max(0, Math.min(event.clientY, window.innerHeight - 260)) })
+  }
+  const addConnectedExternal = (ref: PortRef) => {
+    const node = nodesRef.current.find((item) => item.id === ref.nodeId)
+    const port = node?.data.ports.find((item) => item.id === ref.portId)
+    if (!node || !port) { setStatus('Port no longer exists'); return }
+    if (port.direction === 'input' && edgesRef.current.some((edge) => edge.target === node.id && edge.targetHandle === port.id)) { setStatus('This input port is already connected'); return }
+    const baseId = `external_${Date.now()}`
+    let id = baseId
+    for (let suffix = 2; nodesRef.current.some((item) => item.id === id); suffix++) id = `${baseId}_${suffix}`
+    const external = externalNodeFor(node, port, nodesRef.current, id)
+    const nextNodes = [...nodesRef.current.map((item) => ({ ...item, selected: false })), { ...external, selected: true }]
+    const connection = connectionFor(ref, { nodeId: id, portId: 'port' }, nextNodes, edgesRef.current)
+    if (!connection) { setStatus('Cannot create an external connection for this port'); return }
+    const before = snapshot()
+    replace(nextNodes, addEdge({ ...connection, type: 'orthogonal', markerEnd: { type: MarkerType.ArrowClosed } }, edgesRef.current))
+    record(before)
+    setSelectedId(id)
+    setStatus('External port connected')
+  }
 
   const addBlock = (template: BlockTemplate) => {
     const before = snapshot()
@@ -489,7 +536,7 @@ export default function App() {
         </details>
         <div className="palette"><div className="panel-title">External Ports</div><button className="library-item" onClick={() => addExternal('input')}><span className="library-icon">I</span><strong>External Input</strong></button><button className="library-item" onClick={() => addExternal('output')}><span className="library-icon">O</span><strong>External Output</strong></button><button className="library-item" onClick={() => addExternal('clock')}><span className="library-icon">C</span><strong>Clock Input</strong></button><button className="library-item" onClick={() => addExternal('clock', undefined, undefined, 'output')}><span className="library-icon">C</span><strong>Clock Output</strong></button><button className="library-item" onClick={() => addExternal('reset')}><span className="library-icon">R</span><strong>Reset Input</strong></button><button className="library-item" onClick={() => addExternal('reset', undefined, undefined, 'output')}><span className="library-icon">R</span><strong>Reset Output</strong></button>{interfaces.map((definition) => <div key={definition.name} className="interface-library-group"><div className="interface-library-label">{definition.label}</div><button className="library-item" onClick={() => addExternal('input', definition, 'master')}><span className="library-icon">M</span><strong>{definition.label} Master</strong></button><button className="library-item" onClick={() => addExternal('input', definition, 'slave')}><span className="library-icon">S</span><strong>{definition.label} Slave</strong></button></div>)}<div className="panel-title block-library-title">Block Library</div>{templates.map((template) => <button className="library-item" key={template.kind} onClick={() => addBlock(template)}><span className="library-icon">{template.kind.slice(0, 1)}</span><span><strong>{template.label}</strong><small>{template.kind}</small></span></button>)}</div>
       </aside>
-      <section className="canvas-panel"><ReactFlow nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onInit={(instance) => { flowRef.current = instance }} onNodesChange={(changes: NodeChange<BlockNode>[]) => { const before = snapshot(); const next = applyNodeChanges(changes, nodesRef.current) as BlockNode[]; nodesRef.current = next; onNodesChangeBase(changes); if (changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) record(before) }} onEdgesChange={(changes: EdgeChange<Edge>[]) => { const before = snapshot(); const next = applyEdgeChanges(changes, edgesRef.current); edgesRef.current = next; onEdgesChangeBase(changes); if (changes.some((change) => change.type === 'remove')) record(before) }} onConnect={onConnect} isValidConnection={isValidConnection} onSelectionChange={({ nodes: selected }: OnSelectionChangeParams) => setSelectedId(selected.length === 1 ? selected[0].id : null)} fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']}><Background variant={BackgroundVariant.Dots} gap={16} size={1} color={theme === 'dark' ? '#475569' : '#d7e0eb'} /><Controls /></ReactFlow></section>
+      <section className="canvas-panel" ref={canvasRef} onContextMenuCapture={openPortMenu}><ReactFlow nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onInit={(instance) => { flowRef.current = instance }} onNodesChange={(changes: NodeChange<BlockNode>[]) => { const before = snapshot(); const next = applyNodeChanges(changes, nodesRef.current) as BlockNode[]; nodesRef.current = next; onNodesChangeBase(changes); if (changes.some((change) => change.type === 'remove' || change.type === 'add' || change.type === 'replace')) record(before) }} onEdgesChange={(changes: EdgeChange<Edge>[]) => { const before = snapshot(); const next = applyEdgeChanges(changes, edgesRef.current); edgesRef.current = next; onEdgesChangeBase(changes); if (changes.some((change) => change.type === 'remove')) record(before) }} onConnect={onConnect} onConnectStart={(_, params) => { if (params.nodeId && params.handleId) { setPortMenu(null); setConnectingPort({ nodeId: params.nodeId, portId: params.handleId }) } }} onConnectEnd={() => setConnectingPort(null)} onClickConnectStart={(_, params) => { if (params.nodeId && params.handleId) { setPortMenu(null); setConnectingPort({ nodeId: params.nodeId, portId: params.handleId }) } }} onClickConnectEnd={() => setConnectingPort(null)} isValidConnection={isValidConnection} onSelectionChange={({ nodes: selected }: OnSelectionChangeParams) => setSelectedId(selected.length === 1 ? selected[0].id : null)} fitView snapToGrid snapGrid={[16, 16]} deleteKeyCode={['Backspace', 'Delete']}><Background variant={BackgroundVariant.Dots} gap={16} size={1} color={theme === 'dark' ? '#475569' : '#d7e0eb'} /><Controls /></ReactFlow></section>
       <aside className="properties panel"><div className="panel-title">Properties</div>{selectedNode ? <div className="property-form"><label>Name<input value={selectedNode.data.label} onChange={(event) => updateLabel(event.target.value)} /></label><label>Type<input value={selectedNode.data.kind} readOnly /></label>{selectedNode.type === 'block' && <label>Port layout<select value={selectedNode.data.portLayout === 'horizontal' ? 'horizontal' : 'vertical'} onChange={(event) => { const layout = event.target.value; if (layout === 'horizontal' || layout === 'vertical') updatePortLayout(layout) }}><option value="vertical">Vertical (left / right)</option><option value="horizontal">Horizontal (top / bottom)</option></select></label>}{selectedBus && <><button className="address-map-button" onClick={() => setAddressMapNodeId(selectedNode.id)}>Address Map</button><small className="address-map-summary">{selectedBus.interface.toUpperCase()} · {selectedBusPorts.slaves.length} slave groups · {selectedBusPorts.masters.length} master ports</small></>}{(selectedNode.type === 'externalInput' || selectedNode.type === 'externalOutput') && <label>Width (bits)<input type="number" min="1" step="1" value={selectedNode.data.ports[0]?.width ?? 1} onChange={(event) => updateWidth(Number(event.target.value))} /></label>}{selectedNode.type === 'block' && <><BlockSettingsEditor key={selectedNode.id} data={selectedNode.data} onParameterChange={updateParameter} onDefineChange={updateDefine} /><GeneratedPortsEditor key={selectedNode.id} data={selectedNode.data} onCountChange={updatePortCount} onEnabledChange={updatePortEnabled} /></>}<div className="property-section"><strong>Ports</strong>{selectedNode.data.ports.map((port) => <div className="port-property" key={port.id}><span>{port.name}</span><small>{port.type ?? (port.width !== undefined ? `${port.direction} · ${port.width}-bit` : port.direction)}</small></div>)}</div><button className="danger" onClick={deleteSelected}>Delete node</button></div> : <p className="empty-state">Select a node to edit its properties.</p>}</aside>
     </div>
     {validationOpen && <section className="validation-panel" aria-label="Design validation">
@@ -511,6 +558,12 @@ export default function App() {
         <p className="validation-note">Design validation does not guarantee RTL generation or compilation.</p>
       </div>
     </section>}
+    {portMenu && <div className="port-menu" role="dialog" aria-label="Port connections" style={{ left: portMenu.x, top: portMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
+      <strong>{nodes.find((node) => node.id === portMenu.nodeId)?.data.label} · {nodes.find((node) => node.id === portMenu.nodeId)?.data.ports.find((port) => port.id === portMenu.portId)?.name}</strong>
+      <button disabled={edges.some((edge) => edge.target === portMenu.nodeId && edge.targetHandle === portMenu.portId)} title={edges.some((edge) => edge.target === portMenu.nodeId && edge.targetHandle === portMenu.portId) ? 'Input is already connected' : undefined} onClick={() => { addConnectedExternal(portMenu); setPortMenu(null) }}>Add connected external port</button>
+      <div className="port-menu-title">Connection candidates</div>
+      <div className="port-menu-list">{candidates.length ? candidates.map(({ node, port, connection }) => <button key={JSON.stringify([node.id, port.id])} onClick={() => { onConnect(connection); setPortMenu(null) }}>{node.data.label} · {port.name} <small>{node.data.kind}</small></button>) : <span>No compatible available ports</span>}</div>
+    </div>}
     <footer className="statusbar"><span role="status">{status}</span><span>{nodes.length} nodes · {edges.length} connections</span></footer>
     {addressMapNode && <AddressMapEditor key={addressMapNode.id} node={addressMapNode} nodes={nodes} edges={edges} onCancel={() => setAddressMapNodeId(null)} onApply={applyAddressMap} />}
   </main>
