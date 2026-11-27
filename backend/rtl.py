@@ -216,6 +216,8 @@ def load_interfaces(raw: Any) -> dict[str, dict[str, Any]]:
     for definition in raw:
         if not isinstance(definition, dict):
             raise GenerationError("Invalid interface definition")
+        if "label" in definition:
+            raise GenerationError("Interface label is no longer supported; use type")
         name = definition.get("name")
         if not isinstance(name, str) or not name or len(name) > 128:
             raise GenerationError("Interface definitions need a name")
@@ -263,11 +265,11 @@ def load_blocks(raw: Any) -> dict[str, dict[str, Any]]:
     for definition in raw:
         if not isinstance(definition, dict):
             raise GenerationError("Invalid block definition")
-        kind = definition.get("type", definition.get("kind"))
+        if "kind" in definition or "label" in definition:
+            raise GenerationError("Block kind and label are no longer supported; use type and name")
+        kind = definition.get("type")
         if not isinstance(kind, str) or not kind or len(kind) > 256:
             raise GenerationError("Block definitions need a type")
-        if "type" in definition and "kind" in definition and definition["type"] != definition["kind"]:
-            raise GenerationError("Block definition has conflicting type and kind")
         if kind in result:
             raise GenerationError(f"Duplicate block definition: {kind}")
         result[kind] = definition

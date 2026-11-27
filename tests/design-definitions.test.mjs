@@ -20,8 +20,8 @@ test('manifest reference paths and versions survive loading and validation', asy
   const manifest = { interfaces: [ref('interface/ahb.json')], blocks: [ref('block/bus.json')] }
   const folder = await loadDefinitionFolder([
     file('block-definitions.json', manifest),
-    file('interface/ahb.json', { version: '0.1.0', name: 'ahb', label: 'AHB' }),
-    file('block/bus.json', { version: '0.1.0', kind: 'Bus', label: 'Bus', ports: [master] }),
+    file('interface/ahb.json', { version: '0.1.0', name: 'ahb', type: 'AHB' }),
+    file('block/bus.json', { version: '0.1.0', type: 'Bus', name: 'Bus', ports: [master] }),
   ])
   const parsed = validateDefinitions(folder, folder.sources)
   assert.deepEqual(parsed.interfaces[0].source, ref('interface/ahb.json'))

@@ -6,7 +6,7 @@ The definitions in the `examples` folder are loaded by default. To replace them,
 
 The manifest lists `interfaces` and `blocks` as `{ "path": "interface/ahb.json", "version": "0.1.0" }` references. Paths are relative to the manifest's folder. Each referenced JSON file contains one definition and its `version`; the versions must match exactly. Missing files, invalid definitions, and version mismatches prevent the entire load.
 
-Block definitions use `type` for the block type and `name` for its default instance name. Interface definitions use `name` as the identifier used in port types (such as `axi.master`) and `type` as the displayed interface name. The old block `kind`/`label` and interface `label` fields remain accepted for existing definition folders; if both old and new fields are present, their values must match. Saved design JSON retains its existing format.
+Block definitions use `type` for the block type and `name` for its default instance name. Interface definitions use `name` as the identifier used in port types (such as `axi.master`) and `type` as the displayed interface name. If interface `type` is omitted, the uppercase `name` is displayed. Old definition fields (`kind`/`label` on blocks and `label` on interfaces) are not supported. Saved design JSON retains its existing format.
 
 ### Interface signals
 

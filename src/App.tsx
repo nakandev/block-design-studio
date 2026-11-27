@@ -48,17 +48,6 @@ interface GraphHistory { past: Snapshot[]; future: Snapshot[] }
 type WorkspaceIssue = ValidationIssue & { graphId: string }
 interface DefinitionSet { interfaces: InterfaceDefinition[]; blocks: BlockTemplate[] }
 
-function definitionField(item: Record<string, unknown>, field: string, legacy: string, description: string, required: boolean): string | undefined {
-  const value = item[field]
-  const old = item[legacy]
-  if (value !== undefined && (typeof value !== 'string' || !value.trim())) throw new Error(`${description} has no valid ${field}`)
-  if (old !== undefined && (typeof old !== 'string' || !old.trim())) throw new Error(`${description} has no valid ${legacy}`)
-  if (value !== undefined && old !== undefined && value !== old) throw new Error(`${description} has conflicting ${field} and ${legacy}`)
-  const result = value ?? old
-  if (result === undefined && required) throw new Error(`${description} has no valid ${field}`)
-  return typeof result === 'string' ? result : undefined
-}
-
 function newId(prefix: string, existing: Set<string>): string {
   let id: string
   do {
@@ -90,18 +79,22 @@ export function validateDefinitions(value: unknown, sources?: DefinitionSources)
     if (!entry || typeof entry !== 'object') throw new Error(`Interface ${index + 1} must be an object`)
     const item = entry as Record<string, unknown>
     if (typeof item.name !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(item.name)) throw new Error(`Interface ${index + 1} needs a valid name`)
+    if ('label' in item) throw new Error(`Interface ${item.name}: label is no longer supported; use type`)
+    if (item.type !== undefined && (typeof item.type !== 'string' || !item.type.trim())) throw new Error(`Interface ${item.name} has no valid type`)
     if (names.has(item.name)) throw new Error(`Duplicate interface name: ${item.name}`)
     names.add(item.name)
-    const type = definitionField(item, 'type', 'label', `Interface ${item.name}`, false)
-    return { name: item.name, label: type?.trim() ?? item.name.toUpperCase(), ...validateInterfaceSignals(item, item.name), ...(sources?.interfaces[index] ? { source: sources.interfaces[index] } : {}) }
+    return { name: item.name, label: typeof item.type === 'string' ? item.type.trim() : item.name.toUpperCase(), ...validateInterfaceSignals(item, item.name), ...(sources?.interfaces[index] ? { source: sources.interfaces[index] } : {}) }
   })
   if (!interfaces.length) throw new Error('At least one interface must be defined')
   const kinds = new Set<string>()
   const blocks = raw.blocks.map((entry, templateIndex) => {
     if (!entry || typeof entry !== 'object') throw new Error(`Block ${templateIndex + 1} must be an object`)
     const rawTemplate = entry as Record<string, unknown>
-    const kind = definitionField(rawTemplate, 'type', 'kind', `Block ${templateIndex + 1}`, true)!
-    const label = definitionField(rawTemplate, 'name', 'label', `Block ${kind}`, true)!
+    if ('kind' in rawTemplate || 'label' in rawTemplate) throw new Error(`Block ${templateIndex + 1}: kind and label are no longer supported; use type and name`)
+    if (typeof rawTemplate.type !== 'string' || !rawTemplate.type.trim()) throw new Error(`Block ${templateIndex + 1} has no valid type`)
+    if (typeof rawTemplate.name !== 'string' || !rawTemplate.name.trim()) throw new Error(`Block ${rawTemplate.type} has no valid name`)
+    const kind = rawTemplate.type
+    const label = rawTemplate.name
     const template: Record<string, unknown> & { kind: string; label: string } = { ...rawTemplate, kind, label }
     if (kinds.has(kind)) throw new Error(`Duplicate block type: ${kind}`)
     kinds.add(kind)

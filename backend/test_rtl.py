@@ -56,16 +56,19 @@ class RTLGenerationTests(unittest.TestCase):
             ],
         }
         self.blocks = [
-            {"kind": "Source Block", "label": "Source", "parameters": {"DATA_WIDTH": {"type": "int", "value": "8"}}},
-            {"kind": "Sink", "label": "Sink", "parameters": {"DATA_WIDTH": {"type": "int", "value": "8"}}},
+            {"type": "Source Block", "name": "Source", "parameters": {"DATA_WIDTH": {"type": "int", "value": "8"}}},
+            {"type": "Sink", "name": "Sink", "parameters": {"DATA_WIDTH": {"type": "int", "value": "8"}}},
         ]
 
-    def test_accepts_new_block_type_and_rejects_conflicting_aliases(self):
+    def test_accepts_new_definition_fields_and_rejects_old_ones(self):
         node = block_node("node", "Example", [])
         top, _ = make_top(payload([node], [], blocks=[{"type": "Example", "name": "example"}]))
         self.assertIn("Example u_node", top)
-        with self.assertRaisesRegex(GenerationError, "conflicting type and kind"):
-            make_top(payload([node], [], blocks=[{"type": "Example", "kind": "Other", "name": "example"}]))
+        for definition in [{"kind": "Example", "label": "example"}, {"type": "Example", "name": "example", "kind": "Example"}]:
+            with self.assertRaisesRegex(GenerationError, "no longer supported"):
+                make_top(payload([node], [], blocks=[definition]))
+        with self.assertRaisesRegex(GenerationError, "Interface label is no longer supported"):
+            make_top(payload([], [], interfaces=[{"name": "bus", "label": "Bus"}]))
 
     def test_rejects_hierarchical_designs(self):
         request = payload([], [])
@@ -193,7 +196,7 @@ class RTLGenerationTests(unittest.TestCase):
         node = block_node("src", "Simple", [
             {"id": "link", "name": "link", "direction": "output", "type": "bus.master"},
         ])
-        top, _ = make_top(payload([node], [], [self.interface], [{"kind": "Simple", "label": "Simple"}]))
+        top, _ = make_top(payload([node], [], [self.interface], [{"type": "Simple", "name": "Simple"}]))
         self.assertIn("wire [15:0] net_src_link_DATA", top)
 
     def test_generates_zip_with_source_manifest_and_limitations(self):
@@ -250,8 +253,8 @@ class RTLGenerationTests(unittest.TestCase):
 
     def test_rejects_sanitized_module_name_collisions(self):
         blocks = [
-            {"kind": "A-B", "label": "A-B"},
-            {"kind": "A B", "label": "A B"},
+            {"type": "A-B", "name": "A-B"},
+            {"type": "A B", "name": "A B"},
         ]
         nodes = [
             block_node("a", "A-B", []),
