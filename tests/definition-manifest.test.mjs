@@ -3,11 +3,11 @@ import { after, before, test } from 'node:test'
 import { createServer } from 'vite'
 import { readFile } from 'node:fs/promises'
 
-let server, loadDefinitionFolder, validateDefinitions, interfaceSignals
+let server, loadDefinitionFolder, resolveDefinitionManifest, validateDefinitions, defaultTemplates, defaultInterfaces, interfaceSignals
 before(async () => {
   server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
-  ;({ loadDefinitionFolder } = await server.ssrLoadModule('/src/definitionManifest.ts'))
-  ;({ validateDefinitions } = await server.ssrLoadModule('/src/App.tsx'))
+  ;({ loadDefinitionFolder, resolveDefinitionManifest } = await server.ssrLoadModule('/src/definitionManifest.ts'))
+  ;({ validateDefinitions, defaultTemplates, defaultInterfaces } = await server.ssrLoadModule('/src/App.tsx'))
   ;({ interfaceSignals } = await server.ssrLoadModule('/src/interfaceSignals.ts'))
 })
 after(async () => { await server?.close() })
@@ -32,6 +32,9 @@ test('reports missing files, bad versions, duplicate and unsafe references', asy
   await assert.rejects(loadDefinitionFolder([file('block-definitions.json', { interfaces: [manifest.interfaces[0], manifest.interfaces[0]], blocks: [] }), file('interface/ahb.json', iface)]), /Duplicate definition path/)
   await assert.rejects(loadDefinitionFolder([file('block-definitions.json', { interfaces: [{ path: '../ahb.json', version: '0.1.0' }], blocks: [] })]), /Invalid path/)
   await assert.rejects(loadDefinitionFolder([file('nested/block-definitions.json', manifest)]), /at its root/)
+  assert.throws(() => resolveDefinitionManifest(manifest, {}), /Missing definition file: interface\/ahb.json/)
+  assert.throws(() => resolveDefinitionManifest(manifest, { 'interface/ahb.json': { ...iface, version: 'wrong' } }), /Version mismatch/)
+  assert.throws(() => resolveDefinitionManifest({ interfaces: [manifest.interfaces[0], manifest.interfaces[0]], blocks: [] }, {}), /Duplicate definition path/)
 })
 
 test('all example references resolve and preserve the AXI GPIO settings', async () => {
@@ -44,7 +47,10 @@ test('all example references resolve and preserve the AXI GPIO settings', async 
       webkitRelativePath: `examples/${ref.path}`, text: () => readFile(new URL(ref.path, root), 'utf8'),
     })),
   ]
-  const parsed = validateDefinitions(await loadDefinitionFolder(entries))
+  const loaded = await loadDefinitionFolder(entries)
+  const parsed = validateDefinitions(loaded, loaded.sources)
+  assert.deepEqual(defaultTemplates, parsed.blocks)
+  assert.deepEqual(defaultInterfaces, parsed.interfaces)
   assert.equal(parsed.interfaces.length, 11)
   assert.equal(parsed.blocks.length, 13)
   const ahb = parsed.interfaces.find((entry) => entry.name === 'ahb')

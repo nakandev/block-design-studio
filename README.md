@@ -2,7 +2,7 @@
 
 ## Loading definitions
 
-Use **Load definitions folder** and select a folder containing a manifest, such as the `examples` folder. Folder selection requires browser support for directory uploads.
+The definitions in the `examples` folder are loaded by default. To replace them, use **Load definitions folder** and select a folder containing a manifest. Folder selection requires browser support for directory uploads.
 
 The manifest lists `interfaces` and `blocks` as `{ "path": "interface/ahb.json", "version": "0.1.0" }` references. Paths are relative to the manifest's folder. Each referenced JSON file contains one definition and its `version`; the versions must match exactly. Missing files, invalid definitions, and version mismatches prevent the entire load.
 

@@ -27,6 +27,34 @@ function references(value: unknown, category: string): Reference[] {
   })
 }
 
+function manifestReferences(manifest: unknown): DefinitionSources {
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw new Error('Invalid definitions manifest')
+  const raw = manifest as Record<string, unknown>
+  const interfaces = references(raw.interfaces, 'interfaces')
+  const blocks = references(raw.blocks, 'blocks')
+  const seen = new Set<string>()
+  for (const ref of [...interfaces, ...blocks]) {
+    if (seen.has(ref.path)) throw new Error(`Duplicate definition path: ${ref.path}`)
+    seen.add(ref.path)
+  }
+  return { interfaces, blocks }
+}
+
+function validateReferencedDefinition(value: unknown, ref: Reference): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid definition: ${ref.path}`)
+  if ((value as Record<string, unknown>).version !== ref.version) throw new Error(`Version mismatch in ${ref.path}: expected ${ref.version}`)
+  return value
+}
+
+export function resolveDefinitionManifest(manifest: unknown, files: Record<string, unknown>) {
+  const sources = manifestReferences(manifest)
+  const load = (ref: Reference) => {
+    if (!Object.prototype.hasOwnProperty.call(files, ref.path)) throw new Error(`Missing definition file: ${ref.path}`)
+    return validateReferencedDefinition(files[ref.path], ref)
+  }
+  return { interfaces: sources.interfaces.map(load), blocks: sources.blocks.map(load), sources }
+}
+
 export async function loadDefinitionFolder(files: Iterable<DefinitionFile>) {
   const all = Array.from(files)
   const manifests = all.filter((file) => /^[^/]+\/block-definitions\.json$/.test(file.webkitRelativePath))
@@ -40,22 +68,14 @@ export async function loadDefinitionFolder(files: Iterable<DefinitionFile>) {
     byPath.set(path, file)
   }
   const manifest: unknown = JSON.parse(await manifests[0].text())
-  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw new Error('Invalid definitions manifest')
-  const raw = manifest as Record<string, unknown>
-  const interfaces = references(raw.interfaces, 'interfaces')
-  const blocks = references(raw.blocks, 'blocks')
-  const seen = new Set<string>()
+  const sources = manifestReferences(manifest)
   const load = async (ref: Reference) => {
-    if (seen.has(ref.path)) throw new Error(`Duplicate definition path: ${ref.path}`)
-    seen.add(ref.path)
     const file = byPath.get(ref.path)
     if (!file) throw new Error(`Missing definition file: ${ref.path}`)
     let value: unknown
     try { value = JSON.parse(await file.text()) }
     catch (error) { throw new Error(`Could not read ${ref.path}: ${error instanceof Error ? error.message : String(error)}`) }
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid definition: ${ref.path}`)
-    if ((value as Record<string, unknown>).version !== ref.version) throw new Error(`Version mismatch in ${ref.path}: expected ${ref.version}`)
-    return value
+    return validateReferencedDefinition(value, ref)
   }
-  return { interfaces: await Promise.all(interfaces.map(load)), blocks: await Promise.all(blocks.map(load)), sources: { interfaces, blocks } }
+  return { interfaces: await Promise.all(sources.interfaces.map(load)), blocks: await Promise.all(sources.blocks.map(load)), sources }
 }

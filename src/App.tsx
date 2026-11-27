@@ -15,6 +15,7 @@ import OrthogonalEdge from './OrthogonalEdge'
 import { mergeBlockSettings, validateBlockSettings } from './blockSettings'
 import { busPorts, createAddressMap, getBus, validateBus } from './bus'
 import { loadDefinitionFolder, type DefinitionSources } from './definitionManifest'
+import { defaultDefinitions } from './defaultDefinitions'
 import { validateInterfaceSignals } from './interfaceSignals'
 import { canMergeDefinition, captureInterfaceSources, designDefinitions, migrateInterfaceSources, usedInterfaces, withInterfaceSources } from './designDefinitions'
 import { workspaceFingerprint } from './designChanges'
@@ -27,16 +28,6 @@ import type { AddressMap, BlockPort, BlockTemplate, DefineValue, DesignDocument,
 
 const THEME_STORAGE_KEY = 'block-design-studio-theme-v1'
 type ThemePreference = 'system' | 'light' | 'dark'
-const defaultInterfaces: InterfaceDefinition[] = [{ name: 'axi', label: 'AXI' }, { name: 'ahb', label: 'AHB' }, { name: 'i2c', label: 'I2C' }]
-const defaultTemplates: BlockTemplate[] = [
-  { kind: 'Input', label: 'Input', ports: [{ id: 'data', name: 'data', direction: 'output', width: 32 }] },
-  { kind: 'Output', label: 'Output', ports: [{ id: 'data', name: 'data', direction: 'input', width: 32 }] },
-  { kind: 'Arithmetic', label: 'Adder', ports: [{ id: 'a', name: 'a', direction: 'input', width: 32 }, { id: 'b', name: 'b', direction: 'input', width: 32 }, { id: 'sum', name: 'sum', direction: 'output', width: 32 }] },
-  { kind: 'CPU', label: 'CPU', ports: [{ id: 'clk', name: 'clk', direction: 'input', type: 'clock' }, { id: 'rst', name: 'rst', direction: 'input', type: 'reset' }, { id: 'imem', name: 'imem', direction: 'output', type: 'axi.master' }, { id: 'dmem', name: 'dmem', direction: 'output', type: 'axi.master' }] },
-  { kind: 'AXI Interconnect', label: 'AXI Interconnect', bus: { interface: 'axi' }, ports: [{ id: 'clk', name: 'clk', direction: 'input', type: 'clock' }, { id: 's{i}', name: 's{i}', direction: 'output', type: 'axi.master', generate: { for: { index: 'i', count: 2, min: 1, max: 16 } } }, { id: 'm{i}', name: 'm{i}', direction: 'input', type: 'axi.slave', generate: { for: { index: 'i', count: 2, min: 1, max: 16 } } }] },
-  { kind: 'AHB Interconnect', label: 'AHB Interconnect', bus: { interface: 'ahb' }, ports: [{ id: 'clk', name: 'clk', direction: 'input', type: 'clock' }, { id: 'rst', name: 'rst', direction: 'input', type: 'reset' }, { id: 's{i}', name: 's{i}', direction: 'input', type: 'ahb.slave', generate: { for: { index: 'i', count: 2, min: 1, max: 16 } } }, { id: 'm{i}', name: 'm{i}', direction: 'output', type: 'ahb.master', generate: { for: { index: 'i', count: 2, min: 1, max: 16 } } }] },
-]
-
 const nodeTypes: NodeTypes = {
   block: BlockNodeView,
   subdesign: SubdesignNodeView,
@@ -131,6 +122,8 @@ export function validateDefinitions(value: unknown, sources?: DefinitionSources)
   return { interfaces, blocks }
 }
 
+export const { blocks: defaultTemplates, interfaces: defaultInterfaces } = validateDefinitions(defaultDefinitions, defaultDefinitions.sources)
+
 export default function App() {
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
     const stored = localStorage.getItem(THEME_STORAGE_KEY)
@@ -139,7 +132,7 @@ export default function App() {
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [templates, setTemplates] = useState(defaultTemplates)
   const [interfaces, setInterfaces] = useState(defaultInterfaces)
-  const [nodes, setNodes] = useNodesState<BlockNode>([{ id: 'input_1', type: 'block', position: { x: 80, y: 180 }, data: { label: 'Input', kind: 'Input', ports: defaultTemplates[0].ports, parameters: {} } }])
+  const [nodes, setNodes] = useNodesState<BlockNode>([{ id: 'input_1', type: 'block', position: { x: 80, y: 180 }, data: { label: 'Input', kind: 'Input', ports: [{ id: 'data', name: 'data', direction: 'output', width: 32 }], parameters: {} } }])
   const [edges, setEdges] = useEdgesState<Edge>([])
   const [workspace, setWorkspace] = useState<Workspace>(() => ({ root: { nodes, edges }, subdesigns: [] }))
   const workspaceRef = useRef(workspace)
