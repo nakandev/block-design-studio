@@ -1,4 +1,4 @@
 [
-  { "name": "axi", "label": "AXI" },
-  { "name": "i2c", "label": "I2C" }
+  { "name": "axi", "type": "AXI" },
+  { "name": "i2c", "type": "I2C" }
 ]

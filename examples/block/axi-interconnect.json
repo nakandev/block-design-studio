@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AXI Interconnect",
-  "label": "axi_interconnect",
+  "type": "AXI Interconnect",
+  "name": "axi_interconnect",
   "bus": {
     "interface": "axi"
   },

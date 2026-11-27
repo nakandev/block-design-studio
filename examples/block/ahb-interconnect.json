@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AHB Interconnect",
-  "label": "ahb_interconnect",
+  "type": "AHB Interconnect",
+  "name": "ahb_interconnect",
   "bus": {
     "interface": "ahb"
   },

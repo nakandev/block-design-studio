@@ -60,6 +60,13 @@ class RTLGenerationTests(unittest.TestCase):
             {"kind": "Sink", "label": "Sink", "parameters": {"DATA_WIDTH": {"type": "int", "value": "8"}}},
         ]
 
+    def test_accepts_new_block_type_and_rejects_conflicting_aliases(self):
+        node = block_node("node", "Example", [])
+        top, _ = make_top(payload([node], [], blocks=[{"type": "Example", "name": "example"}]))
+        self.assertIn("Example u_node", top)
+        with self.assertRaisesRegex(GenerationError, "conflicting type and kind"):
+            make_top(payload([node], [], blocks=[{"type": "Example", "kind": "Other", "name": "example"}]))
+
     def test_rejects_hierarchical_designs(self):
         request = payload([], [])
         request["design"]["subdesigns"] = [{"id": "child", "nodes": [], "edges": []}]

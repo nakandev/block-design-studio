@@ -6,6 +6,8 @@ The definitions in the `examples` folder are loaded by default. To replace them,
 
 The manifest lists `interfaces` and `blocks` as `{ "path": "interface/ahb.json", "version": "0.1.0" }` references. Paths are relative to the manifest's folder. Each referenced JSON file contains one definition and its `version`; the versions must match exactly. Missing files, invalid definitions, and version mismatches prevent the entire load.
 
+Block definitions use `type` for the block type and `name` for its default instance name. Interface definitions use `name` as the identifier used in port types (such as `axi.master`) and `type` as the displayed interface name. The old block `kind`/`label` and interface `label` fields remain accepted for existing definition folders; if both old and new fields are present, their values must match. Saved design JSON retains its existing format.
+
 ### Interface signals
 
 Interfaces can optionally define `parameters`, `signals`, `masterSignals`, and `slaveSignals`; definitions without them remain supported. Each signal has a unique HDL identifier `name`, an `input`, `output`, or `inout` direction, and a `width` (a positive integer or a nonempty HDL expression string). Parameters use the same `{ "type": "int", "value": "32" }` format as block parameters. Expressions and parameter values are stored as written, not evaluated or checked against a specific HDL.
@@ -15,6 +17,7 @@ The `signals` directions are relative to the master; the slave uses the opposite
 ```json
 {
   "name": "example",
+  "type": "Example",
   "parameters": { "DATA_WIDTH": { "type": "int", "value": "32" } },
   "signals": [
     { "name": "DATA", "direction": "output", "width": "DATA_WIDTH" }
@@ -37,7 +40,7 @@ With Python 3.9 or later, start the Python backend with `npm run backend` and th
 
 **Validate Design** runs in the browser without the backend. It checks connections, address ranges, names, definitions, defines, and matching interface signal directions and widths; selecting a result focuses the relevant node or connection. Unconnected ports, definition mismatches, role-specific signals and widths that cannot be evaluated are warnings. Width evaluation supports integer literals, parameter references, parentheses, `+`, `-`, `*`, exact `/`, `<<` and `>>`; other HDL expressions are not assumed invalid. Bidirectional signals are not treated as invalid. Results become stale after the design or definitions change. Validation does not guarantee RTL generation or compilation: the backend performs its own final checks when generating RTL.
 
-The backend generates a structural top-level module: block module names come from `kind` after SystemVerilog identifier sanitization, interface pins are flattened as `<port name>_<signal name>`, scalar ports use their sanitized configured names, and signal directions and widths are checked on each connection. Interface width expressions use matching block parameters when present or the interface parameter defaults otherwise. Only configured, materialized ports are emitted; generation templates and Address Maps are ignored.
+The backend generates a structural top-level module: block module names come from the block type after SystemVerilog identifier sanitization, interface pins are flattened as `<port name>_<signal name>`, scalar ports use their sanitized configured names, and signal directions and widths are checked on each connection. Interface width expressions use matching block parameters when present or the interface parameter defaults otherwise. Only configured, materialized ports are emitted; generation templates and Address Maps are ignored.
 
 Instance names and internal wire names are derived from block labels and port names, not node or port IDs. Labels must be nonempty and must not collide after identifier sanitization; rename blocks if generation reports a collision.
 
@@ -59,7 +62,7 @@ Exported designs include an `interfaceSource` with `path` and `version` on each 
 
 For example, an interface port can include `"interfaceSource": { "path": "interface/ahb.json", "version": "0.1.0" }`. Individual generated-port sources are retained when ports are disabled or their count is reduced and later restored.
 
-The design also includes `definitions.interfaces` and `definitions.blocks` listing the definitions used by nodes. Interface entries are collected from ports and generated port definitions; a bus without matching ports is included using its per-node source when available. Different versions remain distinct after reopening. Definition files are not included or automatically loaded. Existing blocks with a known source are not updated from a different definition path or version.
+The design also includes `definitions.interfaces` and `definitions.blocks` listing the definitions used by nodes. Interface entries are collected from ports and generated port definitions; a bus without matching ports is included using its per-node source when available. Different versions remain distinct after reopening. Definition files are not included in the exported design; definitions other than the bundled defaults must be loaded separately. Existing blocks with a known source are not updated from a different definition path or version.
 
 ## Ports
 
@@ -80,8 +83,8 @@ Example:
 ```json
 [
   {
-    "kind": "Sequential",
-    "label": "Sequential",
+    "type": "Sequential",
+    "name": "Sequential",
     "ports": [
       { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },
       { "id": "rst", "name": "rst", "direction": "input", "type": "reset" },

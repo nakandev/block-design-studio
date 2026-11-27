@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AHB_I2C",
-  "label": "ahb_i2c",
+  "type": "AHB_I2C",
+  "name": "ahb_i2c",
   "ports": [
     {
       "id": "clk",

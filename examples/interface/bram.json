@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
   "name": "bram",
-  "label": "BRAM",
+  "type": "BRAM",
   "parameters": {
     "ADDR_WIDTH": { "type": "int", "value": "10" },
     "DATA_WIDTH": { "type": "int", "value": "32" }

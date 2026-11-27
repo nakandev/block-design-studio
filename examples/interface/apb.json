@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
   "name": "apb",
-  "label": "APB",
+  "type": "APB",
   "parameters": {
     "ADDR_WIDTH": { "type": "int", "value": "32" },
     "DATA_WIDTH": { "type": "int", "value": "32" }

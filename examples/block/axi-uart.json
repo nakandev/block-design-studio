@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AXI_UART",
-  "label": "axi_uart",
+  "type": "AXI_UART",
+  "name": "axi_uart",
   "ports": [
     {
       "id": "clk",

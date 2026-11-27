@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AXI_BRAM",
-  "label": "axi_bram",
+  "type": "AXI_BRAM",
+  "name": "axi_bram",
   "ports": [
     {
       "id": "clk",

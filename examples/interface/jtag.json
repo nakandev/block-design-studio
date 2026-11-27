@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
   "name": "jtag",
-  "label": "JTAG",
+  "type": "JTAG",
   "signals": [
     { "name": "TCK", "direction": "output", "width": 1 },
     { "name": "TMS", "direction": "output", "width": 1 },

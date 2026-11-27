@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AXI_GPIO",
-  "label": "axi_gpio",
+  "type": "AXI_GPIO",
+  "name": "axi_gpio",
   "ports": [
     {
       "id": "clk",

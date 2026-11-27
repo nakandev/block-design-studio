@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "CPU",
-  "label": "cpu",
+  "type": "CPU",
+  "name": "cpu",
   "ports": [
     {
       "id": "clk",

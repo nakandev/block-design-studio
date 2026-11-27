@@ -44,7 +44,7 @@ test('loads example AHB bus definitions without altering interface port directio
   assert.deepEqual(ahb.bus, { interface: 'ahb' })
   assert.deepEqual(bus.busPorts(ahb.ports, ahb.bus).slaves.map((port) => port.id), ['s0', 's1'])
   assert.equal(bus.createAddressMap(ahb.ports, ahb.bus).groups[0].entries.length, 8)
-  file.blocks.find((block) => block.kind === 'AHB Interconnect').bus.interface = 'unknown'
+  file.blocks.find((block) => block.type === 'AHB Interconnect').bus.interface = 'unknown'
   assert.throws(() => validateDefinitions(file), /defined interface/)
 })
 

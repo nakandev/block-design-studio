@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
   "name": "wb",
-  "label": "Wishbone",
+  "type": "Wishbone",
   "parameters": {
     "ADDR_WIDTH": { "type": "int", "value": "32" },
     "DATA_WIDTH": { "type": "int", "value": "32" }

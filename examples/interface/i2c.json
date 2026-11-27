@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
   "name": "i2c",
-  "label": "I2C",
+  "type": "I2C",
   "signals": [
     { "name": "SCL", "direction": "inout", "width": 1 },
     { "name": "SDA", "direction": "inout", "width": 1 }

@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "Counter",
-  "label": "counter",
+  "type": "Counter",
+  "name": "counter",
   "ports": [
     {
       "id": "clk",

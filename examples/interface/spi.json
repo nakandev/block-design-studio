@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
   "name": "spi",
-  "label": "SPI",
+  "type": "SPI",
   "signals": [
     { "name": "SCLK", "direction": "output", "width": 1 },
     { "name": "CS_N", "direction": "output", "width": 1 },

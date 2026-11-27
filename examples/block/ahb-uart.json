@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AHB_UART",
-  "label": "ahb_uart",
+  "type": "AHB_UART",
+  "name": "ahb_uart",
   "ports": [
     {
       "id": "clk",

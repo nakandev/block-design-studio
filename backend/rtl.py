@@ -263,9 +263,11 @@ def load_blocks(raw: Any) -> dict[str, dict[str, Any]]:
     for definition in raw:
         if not isinstance(definition, dict):
             raise GenerationError("Invalid block definition")
-        kind = definition.get("kind")
+        kind = definition.get("type", definition.get("kind"))
         if not isinstance(kind, str) or not kind or len(kind) > 256:
-            raise GenerationError("Block definitions need a kind")
+            raise GenerationError("Block definitions need a type")
+        if "type" in definition and "kind" in definition and definition["type"] != definition["kind"]:
+            raise GenerationError("Block definition has conflicting type and kind")
         if kind in result:
             raise GenerationError(f"Duplicate block definition: {kind}")
         result[kind] = definition

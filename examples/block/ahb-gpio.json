@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AHB_GPIO",
-  "label": "ahb_gpio",
+  "type": "AHB_GPIO",
+  "name": "ahb_gpio",
   "ports": [
     {
       "id": "clk",

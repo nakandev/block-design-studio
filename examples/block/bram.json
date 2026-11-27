@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "BRAM",
-  "label": "bram",
+  "type": "BRAM",
+  "name": "bram",
   "ports": [
     {
       "id": "bram",

@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AHB_BRAM",
-  "label": "ahb_bram",
+  "type": "AHB_BRAM",
+  "name": "ahb_bram",
   "ports": [
     {
       "id": "clk",

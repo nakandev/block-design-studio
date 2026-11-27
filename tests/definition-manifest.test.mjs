@@ -26,6 +26,19 @@ test('resolves and validates versioned definitions', async () => {
   assert.throws(() => validateDefinitions([block]), /must be an object/)
 })
 
+test('new definition names preserve semantics and legacy fields remain compatible', () => {
+  const modern = { interfaces: [{ name: 'ahb', type: 'AHB display' }], blocks: [{ type: 'Bus', name: 'bus_instance', ports: [{ id: 'm', name: 'm', type: 'ahb.master' }] }] }
+  const legacy = { interfaces: [{ name: 'ahb', label: 'AHB display' }], blocks: [{ kind: 'Bus', label: 'bus_instance', ports: modern.blocks[0].ports }] }
+  assert.deepEqual(validateDefinitions(modern), validateDefinitions(legacy))
+  assert.equal(validateDefinitions(modern).interfaces[0].label, 'AHB display')
+  assert.equal(validateDefinitions(modern).blocks[0].kind, 'Bus')
+  assert.equal(validateDefinitions(modern).blocks[0].label, 'bus_instance')
+  assert.throws(() => validateDefinitions({ ...modern, blocks: [{ ...modern.blocks[0], kind: 'Other' }] }), /conflicting type and kind/)
+  assert.throws(() => validateDefinitions({ ...modern, blocks: [{ ...modern.blocks[0], label: 'Other' }] }), /conflicting name and label/)
+  assert.throws(() => validateDefinitions({ ...modern, interfaces: [{ ...modern.interfaces[0], label: 'Other' }] }), /conflicting type and label/)
+  assert.throws(() => validateDefinitions({ ...modern, blocks: [{ ...modern.blocks[0], type: '' }] }), /valid type/)
+})
+
 test('reports missing files, bad versions, duplicate and unsafe references', async () => {
   await assert.rejects(loadDefinitionFolder(files().slice(0, 2)), /Missing definition file: block\/bus.json/)
   await assert.rejects(loadDefinitionFolder([file('block-definitions.json', manifest), file('interface/ahb.json', { ...iface, version: '0.2.0' }), file('block/bus.json', block)]), /Version mismatch in interface\/ahb.json/)

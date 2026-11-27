@@ -1,7 +1,7 @@
 [
   {
-    "kind": "AXI Interconnect",
-    "label": "AXI Interconnect",
+    "type": "AXI Interconnect",
+    "name": "AXI Interconnect",
     "bus": { "interface": "axi" },
     "ports": [
       { "id": "clk", "name": "clk", "direction": "input", "type": "clock" },

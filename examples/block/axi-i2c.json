@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "kind": "AXI_I2C",
-  "label": "axi_i2c",
+  "type": "AXI_I2C",
+  "name": "axi_i2c",
   "ports": [
     {
       "id": "clk",
